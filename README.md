@@ -224,6 +224,43 @@ Tunables (defaults in parentheses): `EARLY_WINDOW_MIN` (30), `EARLY_MAX_BUYERS` 
 `HELIUS_MAX_PAGES_TOKEN` (300), `HELIUS_MAX_PAGES_WALLET` (20), `FUNDING_MAX_FUNDERS` (10),
 `PUMPPORTAL_ENABLED` (true), `DISCOVER_MIN_MC_USD` (10000000), `SOL_PRICE_FALLBACK_USD` (unset).
 
+## Deploy to Railway
+
+The repo ships config-as-code for two Railway services sharing this repo, plus Railway's Postgres
+and Redis. Migrations run automatically when ingest boots (`MIGRATE_ON_BOOT=true` default), and
+`PUBLIC_BASE_URL` auto-derives from the service's Railway domain — no ngrok in production.
+
+1. **Create a project** and add **PostgreSQL** and **Redis** (`New → Database`). Note their
+   service names (usually `Postgres` and `Redis`).
+2. **Ingest service** — `New → GitHub Repo` (this repo). In *Settings → Config-as-code* set the
+   config file path to `apps/ingest/railway.json` (keep Root Directory at the repo root — the
+   pnpm lockfile lives there). Variables:
+
+   | Variable | Value |
+   |---|---|
+   | `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` |
+   | `REDIS_URL` | `${{Redis.REDIS_URL}}` |
+   | `HELIUS_API_KEY` | your key |
+   | `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | from BotFather / getUpdates |
+   | `WEBHOOK_AUTH_HEADER` | a long random string |
+
+   Don't set `INGEST_PORT` or `PUBLIC_BASE_URL`: the app listens on Railway's injected `PORT`,
+   and once you hit *Settings → Networking → Generate Domain*, the webhook base URL is derived
+   from `RAILWAY_PUBLIC_DOMAIN` automatically. Keep this service at **1 replica**.
+3. **Web service** — add a second service from the same repo, config file path
+   `apps/web/railway.json`. Variables: only `DATABASE_URL = ${{Postgres.DATABASE_URL}}`.
+   Generate a domain for it — that's your dashboard URL.
+4. **Analyzer one-offs** — open a shell into the ingest service (`railway ssh`, or the service's
+   Console tab) and run the pipeline there:
+   `pnpm analyzer import-tokens fixtures/tokens.sample.csv && pnpm analyzer early-buyers --all && pnpm analyzer funding --all && pnpm analyzer score`.
+   (Running from your laptop also works if you point `DATABASE_URL` at the database's **public**
+   connection string — append `?sslmode=require` to it; the `${{…}}` references above resolve to
+   internal `railway.internal` hosts, which are only reachable between services.)
+
+The reference-variable syntax `${{Postgres.DATABASE_URL}}` must match your database service's
+name — if Railway named it differently, pick the variable through the autocomplete in the
+Variables editor.
+
 ## Development
 
 ```bash

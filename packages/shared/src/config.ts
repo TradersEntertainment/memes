@@ -17,6 +17,11 @@ const boolFromEnv = (def: boolean) =>
     .optional()
     .transform((v) => (v == null || v === '' ? def : v === 'true' || v === '1'));
 
+const optionalPort = z.preprocess(
+  (v) => (v == null || v === '' ? undefined : Number(v)),
+  z.number().int().positive().optional(),
+);
+
 const EnvSchema = z.object({
   HELIUS_API_KEY: z.string().default(''),
   DATABASE_URL: z
@@ -27,7 +32,14 @@ const EnvSchema = z.object({
   TELEGRAM_CHAT_ID: z.string().default(''),
   WEBHOOK_AUTH_HEADER: z.string().default(''),
   PUBLIC_BASE_URL: z.string().default(''),
-  INGEST_PORT: z.coerce.number().int().positive().default(3001),
+  /** Explicit ingest port; falls back to the platform-injected PORT, then 3001. */
+  INGEST_PORT: optionalPort,
+  /** Injected by Railway/Heroku-style platforms. */
+  PORT: optionalPort,
+  /** Injected by Railway once a public domain is generated for the service. */
+  RAILWAY_PUBLIC_DOMAIN: z.string().optional(),
+  /** Ingest applies committed migrations at startup (idempotent). */
+  MIGRATE_ON_BOOT: boolFromEnv(true),
 
   EARLY_WINDOW_MIN: z.coerce.number().positive().default(30),
   EARLY_MAX_BUYERS: z.coerce.number().int().positive().default(150),
@@ -55,6 +67,10 @@ const EnvSchema = z.object({
 });
 
 export type AppConfig = z.infer<typeof EnvSchema>;
+
+export function resolveIngestPort(cfg: AppConfig): number {
+  return cfg.INGEST_PORT ?? cfg.PORT ?? 3001;
+}
 
 export interface ScoringConfig {
   bigTokenMcUsd: number;
@@ -98,7 +114,13 @@ export function getConfig(): AppConfig {
         .join('; ');
       throw new Error(`Invalid environment configuration — ${detail}`);
     }
-    cached = parsed.data;
+    const data = parsed.data;
+    // On Railway the public domain arrives as RAILWAY_PUBLIC_DOMAIN — use it as
+    // the webhook base unless the user set one explicitly.
+    if (!data.PUBLIC_BASE_URL && data.RAILWAY_PUBLIC_DOMAIN) {
+      data.PUBLIC_BASE_URL = `https://${data.RAILWAY_PUBLIC_DOMAIN}`;
+    }
+    cached = data;
   }
   return cached;
 }

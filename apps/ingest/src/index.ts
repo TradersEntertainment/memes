@@ -1,4 +1,6 @@
 import { closeDb } from '@insiderscope/db';
+import { runMigrations } from '@insiderscope/db/migrate';
+import { getConfig, resolveIngestPort } from '@insiderscope/shared';
 import { startAlertWorker } from './alerts/queue';
 import { buildAppCtx } from './context';
 import { scheduleRepeatables, startSystemWorker } from './jobs/scheduler';
@@ -6,13 +8,20 @@ import { buildServer } from './server';
 import { syncHeliusWebhook } from './webhook-sync';
 
 async function main(): Promise<void> {
+  const cfg = getConfig();
+  if (cfg.MIGRATE_ON_BOOT) {
+    await runMigrations(cfg.DATABASE_URL);
+    console.log('[ingest] database migrations applied');
+  }
+
   const ctx = buildAppCtx();
   const workers = [startAlertWorker(ctx, ctx.cfg.REDIS_URL), startSystemWorker(ctx)];
   await scheduleRepeatables(ctx);
 
+  const port = resolveIngestPort(ctx.cfg);
   const app = buildServer(ctx);
-  await app.listen({ port: ctx.cfg.INGEST_PORT, host: '0.0.0.0' });
-  ctx.log(`webhook server listening on :${ctx.cfg.INGEST_PORT}`);
+  await app.listen({ port, host: '0.0.0.0' });
+  ctx.log(`webhook server listening on :${port}`);
 
   if (ctx.bot) {
     void ctx.bot

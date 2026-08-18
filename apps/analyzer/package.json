@@ -15,11 +15,11 @@
   },
   "dependencies": {
     "@insiderscope/db": "workspace:*",
-    "@insiderscope/shared": "workspace:*"
+    "@insiderscope/shared": "workspace:*",
+    "tsx": "^4.19.0"
   },
   "devDependencies": {
     "dotenv": "^16.4.7",
-    "tsx": "^4.19.0",
     "typescript": "^5.8.0",
     "vitest": "^3.2.0"
   }
