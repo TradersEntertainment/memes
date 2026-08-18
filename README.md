@@ -217,9 +217,13 @@ Route handlers read Postgres directly through Drizzle — no separate API layer.
   steady-state operation. The pipeline has its own BullMQ queue so a multi-hour pass never
   delays reconciliation or rotation checks.
 
-  **Curated token lists**: drop `*.csv` files (`mint[,symbol[,ath_mc_usd[,name]]]`) into
-  `TOKENS_DIR` (default `/data/tokens`) — mount a persistent volume there and every pass
-  re-imports them, surviving redeploys. The directory is simply skipped when absent.
+  **Curated token lists**: the repo ships a seed list of well-known $10M+ memecoins
+  (`fixtures/tokens.seed.csv`). On the first pass it is planted into `TOKENS_DIR` (default
+  `/data/tokens` — mount a persistent volume there) as `seed.csv` and re-imported on every pass,
+  so a fresh deployment analyzes real candidates with zero manual steps. Drop your own
+  `*.csv` files (`mint[,symbol[,ath_mc_usd[,name]]]`) next to it to extend the universe; edits
+  to `seed.csv` persist (comment lines out with `#` to disable tokens), deleting it restores the
+  defaults, and without a volume the bundled seed is imported directly.
 
 Not implemented (by design, next iterations): fake-wallet/exit-liquidity ("baiter") detection and
 the Jupiter copy-trade module.

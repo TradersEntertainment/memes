@@ -1,8 +1,12 @@
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { copyFileSync, existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { join, resolve } from 'node:path';
 import { isValidSolanaAddress } from '@insiderscope/shared';
 import type { AnalyzerCtx } from '../context';
 import { upsertToken } from '../lib/persist';
+
+/** Curated $10M+ list shipped with the repo (fixtures/tokens.seed.csv). */
+const BUNDLED_SEED = fileURLToPath(new URL('../../../../fixtures/tokens.seed.csv', import.meta.url));
 
 /**
  * Parse a candidate-token CSV and upsert every row.
@@ -49,17 +53,41 @@ export async function runImportTokens(ctx: AnalyzerCtx, file: string): Promise<v
 }
 
 /**
- * Import every *.csv in a watch directory — the unattended path. Point TOKENS_DIR
- * at a persistent volume (default /data/tokens) and drop your own token lists
- * there once: every pipeline pass re-imports them, and they survive redeploys.
- * Imports are upserts, so re-reading the same file is a no-op.
+ * Import every *.csv in the watch directory — the unattended path. Point
+ * TOKENS_DIR at a persistent volume (default /data/tokens) and every pipeline
+ * pass re-imports what's there; the files survive redeploys and imports are
+ * upserts, so re-reading is a no-op.
+ *
+ * The repo's curated seed list is planted into the directory as seed.csv on the
+ * first pass, so a fresh deployment has real candidates without anyone touching
+ * a console. Edits to seed.csv (e.g. commenting tokens out) persist; deleting
+ * the file restores the defaults on the next pass. Without a volume the bundled
+ * seed is imported directly instead.
  */
 export async function runImportDir(ctx: AnalyzerCtx, dir?: string): Promise<number> {
   const target = dir ?? ctx.cfg.TOKENS_DIR;
-  if (!target || !existsSync(target) || !statSync(target).isDirectory()) {
-    ctx.log(`import-dir: ${target || '(unset)'} not present — skipped`);
-    return 0;
+  const hasDir = !!target && existsSync(target) && statSync(target).isDirectory();
+
+  if (!hasDir) {
+    if (!existsSync(BUNDLED_SEED)) {
+      ctx.log(`import-dir: ${target || '(unset)'} not present and no bundled seed — skipped`);
+      return 0;
+    }
+    ctx.log(`import-dir: ${target || '(unset)'} not present — importing bundled seed list`);
+    return importCsv(ctx, readFileSync(BUNDLED_SEED, 'utf8'), 'bundled seed');
   }
+
+  const seedTarget = join(target, 'seed.csv');
+  if (!existsSync(seedTarget) && existsSync(BUNDLED_SEED)) {
+    try {
+      copyFileSync(BUNDLED_SEED, seedTarget);
+      ctx.log(`import-dir: planted curated seed list at ${seedTarget}`);
+    } catch (err) {
+      ctx.log(`import-dir: could not write ${seedTarget} (${err}) — importing bundled seed directly`);
+      await importCsv(ctx, readFileSync(BUNDLED_SEED, 'utf8'), 'bundled seed');
+    }
+  }
+
   const files = readdirSync(target).filter((f) => f.toLowerCase().endsWith('.csv'));
   if (files.length === 0) {
     ctx.log(`import-dir: no .csv files in ${target}`);
