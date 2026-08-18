@@ -3,6 +3,7 @@ import {
   runDiscover,
   runEarlyBuyersAll,
   runFundingAll,
+  runImportDir,
   runScoreAll,
 } from '@insiderscope/analyzer';
 import type { AppCtx } from '../context';
@@ -12,8 +13,9 @@ import { syncHeliusWebhook } from './../webhook-sync';
 /**
  * The full historical pipeline, unattended (Phase 4.2). Runs nightly at 03:00 UTC
  * and on demand via the bot's /scan command, so nobody has to hold an SSH session
- * open: discover new $10M candidates → crawl their early buyers → build the
- * funding graph → rescore every wallet → push the refreshed watch list to Helius.
+ * open: pick up CSVs dropped in TOKENS_DIR → discover new $10M candidates → crawl
+ * their early buyers → build the funding graph → rescore every wallet → push the
+ * refreshed watch list to Helius.
  *
  * Each stage is isolated: a failing stage logs and the rest still run, because a
  * half-finished pipeline is far better than none (every command is idempotent and
@@ -25,6 +27,7 @@ export async function nightlyRescore(ctx: AppCtx): Promise<void> {
   const analyzerCtx = buildAnalyzerCtx();
 
   const stages: [string, () => Promise<unknown>][] = [
+    ['import-dir', () => runImportDir(analyzerCtx)],
     ['discover', () => runDiscover(analyzerCtx)],
     ['early-buyers', () => runEarlyBuyersAll(analyzerCtx)],
     ['funding', () => runFundingAll(analyzerCtx)],

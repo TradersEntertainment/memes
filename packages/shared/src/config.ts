@@ -57,6 +57,12 @@ const EnvSchema = z.object({
   FUNDING_MAX_FUNDERS: z.coerce.number().int().positive().default(10),
   /** Days before a token's launch to include when crawling funding transfers. */
   FUNDING_LOOKBACK_DAYS: z.coerce.number().positive().default(30),
+  /**
+   * Directory scanned for candidate-token CSVs on every pipeline pass. Point it
+   * at a persistent volume so hand-curated lists survive redeploys; ignored when
+   * the directory does not exist.
+   */
+  TOKENS_DIR: z.string().default('/data/tokens'),
   /** Lifetime swap count above which a wallet is treated as a bot and blacklisted. */
   SCORE_MAX_TRADES: z.coerce.number().int().positive().default(500),
   /** Trade count at which the selectivity factor reaches zero. */

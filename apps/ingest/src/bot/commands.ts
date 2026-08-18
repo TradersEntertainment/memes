@@ -126,7 +126,7 @@ export function registerCommands(bot: Bot, ctx: AppCtx): void {
   bot.command('unmute', setMuted(false));
 
   bot.command('scan', async (c) => {
-    await ctx.systemQueue.add('nightly-rescore', {});
+    await ctx.pipelineQueue.add('pipeline', {});
     await c.reply(
       [
         '🔍 Analiz turu kuyruğa alındı: discover → early-buyers → funding → score.',

@@ -209,11 +209,17 @@ Route handlers read Postgres directly through Drizzle — no separate API layer.
   token. Mints that watched wallets buy get live trade subscriptions (LRU-capped). Disable with
   `PUMPPORTAL_ENABLED=false`.
 - **Unattended pipeline** — 03:00 UTC nightly (and on demand via the bot's `/scan`), the ingest
-  service runs the whole historical pipeline in-process: `discover` → `early-buyers --all` →
-  `funding --all` → `score`, then refreshes the Helius webhook address list. Each stage is
-  isolated, so a failing stage doesn't abort the rest, and every command is idempotent, so the
-  next pass resumes cleanly. Running the analyzer CLI by hand is therefore optional — useful for
-  a first backfill or a single token, not required for steady-state operation.
+  service runs the whole historical pipeline in-process: import CSVs from `TOKENS_DIR` →
+  `discover` → `early-buyers --all` → `funding --all` → `score`, then refreshes the Helius
+  webhook address list. Each stage is isolated, so a failing stage doesn't abort the rest, and
+  every command is idempotent, so the next pass resumes cleanly. Running the analyzer CLI by hand
+  is therefore optional — useful for a first backfill or a single token, not required for
+  steady-state operation. The pipeline has its own BullMQ queue so a multi-hour pass never
+  delays reconciliation or rotation checks.
+
+  **Curated token lists**: drop `*.csv` files (`mint[,symbol[,ath_mc_usd[,name]]]`) into
+  `TOKENS_DIR` (default `/data/tokens`) — mount a persistent volume there and every pass
+  re-imports them, surviving redeploys. The directory is simply skipped when absent.
 
 Not implemented (by design, next iterations): fake-wallet/exit-liquidity ("baiter") detection and
 the Jupiter copy-trade module.

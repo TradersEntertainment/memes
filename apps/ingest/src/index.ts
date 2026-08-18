@@ -3,7 +3,7 @@ import { runMigrations } from '@insiderscope/db/migrate';
 import { getConfig, resolveIngestPort } from '@insiderscope/shared';
 import { startAlertWorker } from './alerts/queue';
 import { buildAppCtx } from './context';
-import { scheduleRepeatables, startSystemWorker } from './jobs/scheduler';
+import { scheduleRepeatables, startPipelineWorker, startSystemWorker } from './jobs/scheduler';
 import { buildServer } from './server';
 import { syncHeliusWebhook } from './webhook-sync';
 
@@ -15,7 +15,11 @@ async function main(): Promise<void> {
   }
 
   const ctx = buildAppCtx();
-  const workers = [startAlertWorker(ctx, ctx.cfg.REDIS_URL), startSystemWorker(ctx)];
+  const workers = [
+    startAlertWorker(ctx, ctx.cfg.REDIS_URL),
+    startSystemWorker(ctx),
+    startPipelineWorker(ctx),
+  ];
   await scheduleRepeatables(ctx);
 
   const port = resolveIngestPort(ctx.cfg);
@@ -43,7 +47,11 @@ async function main(): Promise<void> {
     await app.close().catch(() => {});
     await ctx.bot?.stop().catch(() => {});
     await Promise.allSettled(workers.map((w) => w.close()));
-    await Promise.allSettled([ctx.alertsQueue.close(), ctx.systemQueue.close()]);
+    await Promise.allSettled([
+      ctx.alertsQueue.close(),
+      ctx.systemQueue.close(),
+      ctx.pipelineQueue.close(),
+    ]);
     ctx.redis.disconnect();
     await closeDb().catch(() => {});
     process.exit(0);

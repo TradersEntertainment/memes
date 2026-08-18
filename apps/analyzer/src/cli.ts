@@ -3,13 +3,14 @@ import { buildCtx } from './context';
 import { runDiscover } from './commands/discover';
 import { runEarlyBuyers, runEarlyBuyersAll } from './commands/early-buyers';
 import { runFunding, runFundingAll } from './commands/funding';
-import { runImportTokens } from './commands/import-tokens';
+import { runImportDir, runImportTokens } from './commands/import-tokens';
 import { runScoreAll, runScoreWallet } from './commands/score';
 
 const USAGE = `InsiderScope analyzer
 
 Usage:
   pnpm analyzer import-tokens <file.csv>     seed candidate tokens (mint[,symbol[,ath_mc_usd[,name]]])
+  pnpm analyzer import-dir [dir]             import every *.csv in TOKENS_DIR (default /data/tokens)
   pnpm analyzer discover                     refresh ATHs + scan DexScreener feeds for new candidates
   pnpm analyzer early-buyers <mint> | --all  crawl launch history, extract early buyers into positions
   pnpm analyzer funding <wallet> | --all     build funding graph, mark creator-linked positions
@@ -29,6 +30,10 @@ async function main(): Promise<void> {
     case 'import-tokens': {
       if (!first) throw new Error(`missing csv path\n\n${USAGE}`);
       await runImportTokens(buildCtx(), first);
+      return;
+    }
+    case 'import-dir': {
+      await runImportDir(buildCtx(), first);
       return;
     }
     case 'early-buyers': {

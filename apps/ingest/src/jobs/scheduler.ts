@@ -2,7 +2,7 @@ import { Worker } from 'bullmq';
 import { makeBullConnection } from '../alerts/queue';
 import type { AppCtx } from '../context';
 import type { RotationCheckJobData } from '../pipeline/rotation';
-import { SYSTEM_QUEUE } from '../system-queue';
+import { PIPELINE_QUEUE, SYSTEM_QUEUE } from '../system-queue';
 import { nightlyRescore } from './nightly-rescore';
 import { sweepProbation } from './probation-expiry';
 import { reconcile } from './reconcile';
@@ -22,9 +22,6 @@ export function startSystemWorker(ctx: AppCtx): Worker {
         case 'rotation-check':
           await runRotationCheck(ctx, job.data as RotationCheckJobData);
           break;
-        case 'nightly-rescore':
-          await nightlyRescore(ctx);
-          break;
         default:
           ctx.log(`system worker: unknown job "${job.name}"`);
       }
@@ -32,6 +29,19 @@ export function startSystemWorker(ctx: AppCtx): Worker {
     { connection: makeBullConnection(ctx.cfg.REDIS_URL), concurrency: 1 },
   );
   worker.on('failed', (job, err) => ctx.log(`system job ${job?.name} failed: ${err.message}`));
+  return worker;
+}
+
+/** Separate worker so a multi-hour analysis pass never blocks the short jobs. */
+export function startPipelineWorker(ctx: AppCtx): Worker {
+  const worker = new Worker(
+    PIPELINE_QUEUE,
+    async () => {
+      await nightlyRescore(ctx);
+    },
+    { connection: makeBullConnection(ctx.cfg.REDIS_URL), concurrency: 1 },
+  );
+  worker.on('failed', (job, err) => ctx.log(`pipeline job ${job?.id} failed: ${err.message}`));
   return worker;
 }
 
@@ -47,10 +57,15 @@ export async function scheduleRepeatables(ctx: AppCtx): Promise<void> {
     { every: 3_600_000 },
     { name: 'probation-expiry' },
   );
-  await ctx.systemQueue.upsertJobScheduler(
-    'nightly-rescore',
+  await ctx.pipelineQueue.upsertJobScheduler(
+    'nightly-pipeline',
     { pattern: '0 3 * * *', tz: 'UTC' },
-    { name: 'nightly-rescore' },
+    { name: 'pipeline' },
   );
-  ctx.log('system jobs scheduled: reconcile, probation-expiry, nightly-rescore');
+  // Drop the pre-split schedule so upgraded deployments don't keep running the
+  // pipeline on the latency-sensitive queue.
+  await ctx.systemQueue.removeJobScheduler('nightly-rescore').catch(() => undefined);
+  ctx.log(
+    'jobs scheduled: reconcile (5m), probation-expiry (1h), full pipeline (03:00 UTC, own queue)',
+  );
 }

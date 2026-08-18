@@ -10,7 +10,7 @@ import { handleTransferOut, type RotationDeps } from './pipeline/rotation';
 import type { PipelineDeps } from './pipeline/process';
 import { PumpCurveCache } from './pump-cache';
 import { PumpPortalConsumer } from './pumpportal';
-import { createSystemQueue } from './system-queue';
+import { createPipelineQueue, createSystemQueue } from './system-queue';
 import { getWatchedWallets } from './watched';
 
 export interface AppCtx {
@@ -24,6 +24,7 @@ export interface AppCtx {
   pumpPortal: PumpPortalConsumer | null;
   alertsQueue: Queue;
   systemQueue: Queue;
+  pipelineQueue: Queue;
   pipeline: PipelineDeps;
 }
 
@@ -42,6 +43,7 @@ export function buildAppCtx(): AppCtx {
   const pumpPortal = cfg.PUMPPORTAL_ENABLED ? new PumpPortalConsumer({ pumpCache, log }) : null;
   const alertsQueue = createAlertsQueue(cfg.REDIS_URL);
   const systemQueue = createSystemQueue(cfg.REDIS_URL);
+  const pipelineQueue = createPipelineQueue(cfg.REDIS_URL);
 
   const rotationDeps: RotationDeps = {
     db,
@@ -78,6 +80,7 @@ export function buildAppCtx(): AppCtx {
     pumpPortal,
     alertsQueue,
     systemQueue,
+    pipelineQueue,
     pipeline,
   };
   ctx.bot = createBot(ctx);
