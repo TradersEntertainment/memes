@@ -45,17 +45,18 @@ describe.skipIf(!url)('getSolPriceUsdAt (real postgres, stubbed binance)', () =>
     await h.close();
   });
 
-  it('backfills from klines on a cache miss, then serves from the db', async () => {
-    const klines = [-2, -1, 0, 1, 2].map((offset) => [
-      TEST_HOUR.getTime() + offset * 3600_000,
-      '150.0',
-      '151.0',
-      '149.0',
-      offset === 0 ? '150.5' : '150.0',
-      '1000',
+  it('backfills from the price provider on a cache miss, then serves from the db', async () => {
+    // Coinbase candle shape: [ time(seconds), low, high, open, close, volume ]
+    const candles = [-2, -1, 0, 1, 2].map((offset) => [
+      (TEST_HOUR.getTime() + offset * 3600_000) / 1000,
+      149,
+      151,
+      150,
+      offset === 0 ? 150.5 : 150.0,
+      1000,
     ]);
     const fetchImpl = vi.fn(async () =>
-      new Response(JSON.stringify(klines), { status: 200 }),
+      new Response(JSON.stringify(candles), { status: 200 }),
     ) as unknown as typeof fetch;
 
     const price = await getSolPriceUsdAt(h.db, new Date('2020-06-15T13:45:12Z'), { fetchImpl });
