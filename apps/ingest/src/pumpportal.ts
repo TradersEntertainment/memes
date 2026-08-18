@@ -47,8 +47,22 @@ export class PumpPortalConsumer {
   private reconnectTimer: NodeJS.Timeout | null = null;
   private pingTimer: NodeJS.Timeout | null = null;
   private readonly tracked = new Set<string>();
+  private connected = false;
+  private lastEventAtTs: number | null = null;
+  private readonly startedAt = Date.now();
 
   constructor(private readonly ctx: PumpPortalCtx) {}
+
+  /** Health probes for the watchdog. */
+  isConnected(): boolean {
+    return this.connected;
+  }
+  lastEventAt(): number | null {
+    return this.lastEventAtTs;
+  }
+  uptimeMs(): number {
+    return Date.now() - this.startedAt;
+  }
 
   start(): void {
     this.stopped = false;
@@ -87,6 +101,7 @@ export class PumpPortalConsumer {
     this.ws = ws;
 
     ws.on('open', () => {
+      this.connected = true;
       this.backoffMs = 1_000;
       this.ctx.log('pumpportal: connected, subscribing to new launches');
       this.send({ method: 'subscribeNewToken' });
@@ -100,6 +115,7 @@ export class PumpPortalConsumer {
     });
 
     ws.on('message', (raw) => {
+      this.lastEventAtTs = Date.now();
       void this.onMessage(String(raw)).catch((err) =>
         this.ctx.log(`pumpportal message error: ${err}`),
       );
@@ -110,6 +126,7 @@ export class PumpPortalConsumer {
     });
 
     ws.on('close', () => {
+      this.connected = false;
       if (this.pingTimer) clearInterval(this.pingTimer);
       this.scheduleReconnect();
     });

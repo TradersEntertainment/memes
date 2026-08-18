@@ -16,6 +16,7 @@ import {
 } from '@insiderscope/shared';
 import type { Bot, CommandContext, Context } from 'grammy';
 import type { AppCtx } from '../context';
+import { buildHealthReport } from '../health';
 import { maybeAutoScan } from '../jobs/nightly-rescore';
 import { invalidateWatchedCache } from '../watched';
 import { syncHeliusWebhook } from '../webhook-sync';
@@ -29,6 +30,7 @@ const HELP = [
   '/stats &lt;adres&gt; — cüzdan özeti',
   '/scan — tam analiz turunu şimdi başlat (gece 03:00 UTC otomatik çalışır)',
   '/tokens &lt;mint&gt;[,&lt;mint&gt;…] — aday token ekle, sonraki turda taranır',
+  '/health — sistem durumu (webhook, Helius, PumpPortal, kuyruklar)',
 ].join('\n');
 
 const tierEmoji: Record<string, string> = {
@@ -156,6 +158,17 @@ export function registerCommands(bot: Bot, ctx: AppCtx): void {
         queued ? 'Tarama otomatik başlatıldı.' : 'Sıradaki turda taranacak.'
       }`,
     );
+  });
+
+  bot.command('health', async (c) => {
+    const report = await buildHealthReport(ctx);
+    const lines = ['🩺 <b>Sistem durumu</b>', ...report.lines];
+    if (report.problems.length > 0) {
+      lines.push('', '⚠️ Aktif sorunlar:', ...report.problems.map((p) => `• ${p.text}`));
+    } else {
+      lines.push('', 'Her şey yolunda ✅');
+    }
+    await c.reply(lines.join('\n'), { parse_mode: 'HTML' });
   });
 
   bot.command('stats', async (c) => {

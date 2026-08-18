@@ -3,6 +3,7 @@ import { runMigrations } from '@insiderscope/db/migrate';
 import { getConfig, resolveIngestPort } from '@insiderscope/shared';
 import { startAlertWorker } from './alerts/queue';
 import { buildAppCtx } from './context';
+import { buildHealthReport } from './health';
 import { maybeAutoScan } from './jobs/nightly-rescore';
 import { scheduleRepeatables, startPipelineWorker, startSystemWorker } from './jobs/scheduler';
 import { buildServer } from './server';
@@ -39,10 +40,24 @@ async function main(): Promise<void> {
 
   ctx.pumpPortal?.start();
 
-  // Self-starting analysis: if the candidate pool (seed list, /data CSVs, /tokens
-  // additions) holds unprocessed work, queue a pass now instead of waiting for
-  // 03:00 UTC. No-ops when nothing is pending or a pass is already running.
-  void maybeAutoScan(ctx, 'boot').catch((err) => ctx.log(`boot auto-scan failed: ${err}`));
+  // Self-starting analysis + boot report: check for pending work, queue a pass if
+  // needed, then tell Telegram what state every component came up in — so a
+  // redeploy confirms itself instead of someone tailing logs.
+  void (async () => {
+    const queued = await maybeAutoScan(ctx, 'boot').catch((err) => {
+      ctx.log(`boot auto-scan failed: ${err}`);
+      return false;
+    });
+    const report = await buildHealthReport(ctx).catch(() => null);
+    const text = [
+      '🟢 <b>Sistem açıldı</b>',
+      ...(report?.lines ?? []),
+      queued
+        ? '🔍 Bekleyen iş bulundu — analiz turu otomatik başlatıldı.'
+        : '🔍 Bekleyen analiz işi yok — saatlik eşik kontrolü ve gece turu devrede.',
+    ].join('\n');
+    await ctx.alertsQueue.add('custom', { custom: { text } });
+  })().catch((err) => ctx.log(`boot notice failed: ${err}`));
 
   let shuttingDown = false;
   const shutdown = async (signal: string) => {

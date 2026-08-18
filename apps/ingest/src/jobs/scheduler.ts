@@ -9,6 +9,7 @@ import { nightlyRescore, type PipelineReason } from './nightly-rescore';
 import { sweepProbation } from './probation-expiry';
 import { reconcile } from './reconcile';
 import { runRotationCheck } from './rotation-check';
+import { runWatchdog } from './watchdog';
 
 export function startSystemWorker(ctx: AppCtx): Worker {
   const worker = new Worker(
@@ -29,6 +30,9 @@ export function startSystemWorker(ctx: AppCtx): Worker {
           break;
         case 'daily-digest':
           await sendDailyDigest(ctx);
+          break;
+        case 'watchdog':
+          await runWatchdog(ctx);
           break;
         default:
           ctx.log(`system worker: unknown job "${job.name}"`);
@@ -75,6 +79,7 @@ export async function scheduleRepeatables(ctx: AppCtx): Promise<void> {
     { pattern: '0 9 * * *', tz: 'UTC' },
     { name: 'daily-digest' },
   );
+  await ctx.systemQueue.upsertJobScheduler('watchdog', { every: 15 * 60_000 }, { name: 'watchdog' });
   await ctx.pipelineQueue.upsertJobScheduler(
     'nightly-pipeline',
     { pattern: '0 3 * * *', tz: 'UTC' },
@@ -84,6 +89,6 @@ export async function scheduleRepeatables(ctx: AppCtx): Promise<void> {
   // pipeline on the latency-sensitive queue.
   await ctx.systemQueue.removeJobScheduler('nightly-rescore').catch(() => undefined);
   ctx.log(
-    'jobs scheduled: reconcile (5m), probation-expiry (1h), ath-refresh (1h), daily-digest (09:00 UTC), full pipeline (03:00 UTC, own queue)',
+    'jobs scheduled: reconcile (5m), watchdog (15m), probation-expiry (1h), ath-refresh (1h), daily-digest (09:00 UTC), full pipeline (03:00 UTC, own queue)',
   );
 }
