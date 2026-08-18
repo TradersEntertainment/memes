@@ -1,0 +1,47 @@
+{
+  "schemaVersion": "1.0.0",
+  "pairs": [
+    {
+      "chainId": "solana",
+      "dexId": "raydium",
+      "pairAddress": "RaydiumPairAddressAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "baseToken": {
+        "address": "MemeCoinMintAAAAAAAAAAAAAAAAAAAAAAAAAAAApump",
+        "symbol": "MEME",
+        "name": "Meme Coin"
+      },
+      "priceUsd": "0.0315",
+      "marketCap": 31500000,
+      "fdv": 31500000,
+      "liquidity": { "usd": 850000 },
+      "volume": { "h24": 12000000 },
+      "pairCreatedAt": 1755500000000
+    },
+    {
+      "chainId": "solana",
+      "dexId": "pumpswap",
+      "pairAddress": "PumpswapPairAddressAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "baseToken": {
+        "address": "MemeCoinMintAAAAAAAAAAAAAAAAAAAAAAAAAAAApump",
+        "symbol": "MEME",
+        "name": "Meme Coin"
+      },
+      "priceUsd": "0.030",
+      "fdv": 30000000,
+      "liquidity": { "usd": 20000 },
+      "volume": { "h24": 90000 },
+      "pairCreatedAt": 1755500000000
+    },
+    {
+      "chainId": "ethereum",
+      "dexId": "uniswap",
+      "pairAddress": "0xEthPairShouldBeIgnored",
+      "baseToken": {
+        "address": "MemeCoinMintAAAAAAAAAAAAAAAAAAAAAAAAAAAApump",
+        "symbol": "MEME"
+      },
+      "marketCap": 999,
+      "liquidity": { "usd": 999999999 }
+    }
+  ]
+}
