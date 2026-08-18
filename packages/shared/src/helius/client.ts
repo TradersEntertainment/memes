@@ -28,6 +28,27 @@ export interface IterateOptions {
   type?: 'SWAP' | 'TRANSFER';
 }
 
+export class HeliusHttpError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly body: string,
+  ) {
+    super(message);
+    this.name = 'HeliusHttpError';
+  }
+}
+
+/**
+ * Helius answers a history page with no events in the searched slot range with
+ * HTTP 404 plus the signature to resume from — a "keep paging" signal, not an
+ * error. Returns that signature when the body carries one.
+ */
+export function parseResumeSignature(body: string): string | null {
+  const match = /before-signature[^]*?set to ([1-9A-HJ-NP-Za-km-z]{32,90})/.exec(body);
+  return match?.[1] ?? null;
+}
+
 export interface HeliusClientOptions {
   apiKey: string;
   concurrency?: number;
@@ -96,8 +117,12 @@ export class HeliusClient {
       if (netErr) {
         throw netErr instanceof Error ? netErr : new Error(String(netErr));
       }
-      const body = (await res!.text()).slice(0, 300);
-      throw new Error(`Helius request failed (${res!.status}) ${this.sanitize(url)}: ${body}`);
+      const body = await res!.text();
+      throw new HeliusHttpError(
+        `Helius request failed (${res!.status}) ${this.sanitize(url)}: ${body.slice(0, 300)}`,
+        res!.status,
+        body,
+      );
     }
   }
 
@@ -106,7 +131,19 @@ export class HeliusClient {
   }
 
   /** GET /v0/addresses/{address}/transactions — parsed txs, newest first. */
-  getParsedTransactions(address: string, o: HistoryOptions = {}): Promise<EnhancedTx[]> {
+  async getParsedTransactions(address: string, o: HistoryOptions = {}): Promise<EnhancedTx[]> {
+    return (await this.fetchHistoryPage(address, o)).txs;
+  }
+
+  /**
+   * One history page. An empty `txs` with `resumeBefore` set means "no events in
+   * the range searched, continue from this signature" — Helius signals that with
+   * a 404 that must not abort the crawl.
+   */
+  private async fetchHistoryPage(
+    address: string,
+    o: HistoryOptions = {},
+  ): Promise<{ txs: EnhancedTx[]; resumeBefore?: string }> {
     const params = new URLSearchParams({
       'api-key': this.apiKey,
       limit: String(o.limit ?? 100),
@@ -114,9 +151,19 @@ export class HeliusClient {
     if (o.before) params.set('before', o.before);
     if (o.until) params.set('until', o.until);
     if (o.type) params.set('type', o.type);
-    return this.request<EnhancedTx[]>(
-      `${HELIUS_API_BASE}/v0/addresses/${address}/transactions?${params}`,
-    );
+    try {
+      const txs = await this.request<EnhancedTx[]>(
+        `${HELIUS_API_BASE}/v0/addresses/${address}/transactions?${params}`,
+      );
+      return { txs };
+    } catch (err) {
+      if (err instanceof HeliusHttpError && err.status === 404) {
+        const resume = parseResumeSignature(err.body);
+        if (resume) return { txs: [], resumeBefore: resume };
+        return { txs: [] }; // nothing left to search
+      }
+      throw err;
+    }
   }
 
   /**
@@ -129,16 +176,24 @@ export class HeliusClient {
     let before: string | undefined;
     let pages = 0;
     while (pages < maxPages) {
-      const batch = await this.getParsedTransactions(address, {
+      const { txs, resumeBefore } = await this.fetchHistoryPage(address, {
         before,
         until: o.until,
         type: o.type,
         limit: 100,
       });
-      if (batch.length === 0) return;
-      yield batch;
       pages += 1;
-      before = batch[batch.length - 1]!.signature;
+      if (txs.length === 0) {
+        // Empty page with a resume hint: the searched slot range held no matching
+        // events (common with type filters on sparse wallets). Keep walking back.
+        if (resumeBefore && resumeBefore !== before) {
+          before = resumeBefore;
+          continue;
+        }
+        return;
+      }
+      yield txs;
+      before = txs[txs.length - 1]!.signature;
     }
     this.log?.(`iterateHistory(${address}): page cap ${maxPages} reached, history truncated`);
   }

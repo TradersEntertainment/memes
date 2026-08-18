@@ -55,6 +55,12 @@ const EnvSchema = z.object({
   HELIUS_MAX_PAGES_TOKEN: z.coerce.number().int().positive().default(300),
   HELIUS_MAX_PAGES_WALLET: z.coerce.number().int().positive().default(20),
   FUNDING_MAX_FUNDERS: z.coerce.number().int().positive().default(10),
+  /** Days before a token's launch to include when crawling funding transfers. */
+  FUNDING_LOOKBACK_DAYS: z.coerce.number().positive().default(30),
+  /** Lifetime swap count above which a wallet is treated as a bot and blacklisted. */
+  SCORE_MAX_TRADES: z.coerce.number().int().positive().default(500),
+  /** Trade count at which the selectivity factor reaches zero. */
+  SCORE_SELECTIVITY_TRADES: z.coerce.number().int().positive().default(200),
   PUMPPORTAL_ENABLED: boolFromEnv(true),
   DISCOVER_MIN_MC_USD: z.coerce.number().positive().default(10_000_000),
   SOL_PRICE_FALLBACK_USD: z
@@ -89,8 +95,8 @@ export interface ScoringConfig {
 export function scoringConfig(cfg: AppConfig): ScoringConfig {
   return {
     bigTokenMcUsd: cfg.DISCOVER_MIN_MC_USD,
-    maxTradesForSelectivity: 200,
-    overtradeBlacklist: 500,
+    maxTradesForSelectivity: cfg.SCORE_SELECTIVITY_TRADES,
+    overtradeBlacklist: cfg.SCORE_MAX_TRADES,
     minWinRate: 0.3,
     minDecidedForWinRateBlacklist: 5,
     sniperSeconds: 3,

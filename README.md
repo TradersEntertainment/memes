@@ -159,6 +159,8 @@ MC even before the token is listed anywhere.
 | `/add <addr> [label]` | Track a wallet (tier watch; never downgrades an existing tier) |
 | `/mute <addr>` / `/unmute <addr>` | Suppress/enable its alerts (events still recorded) |
 | `/stats <addr>` | Score breakdown, win rate, PnL, recent positions |
+| `/tokens <mint>…` | Queue candidate tokens for the next analysis pass |
+| `/scan` | Run the full pipeline now (same job the nightly cron runs) |
 
 ### Rotation tracking
 
@@ -206,8 +208,12 @@ Route handlers read Postgres directly through Drizzle — no separate API layer.
   (metadata + virtual reserves), so alerts show MC and "Launch +Xdk" before DexScreener lists the
   token. Mints that watched wallets buy get live trade subscriptions (LRU-capped). Disable with
   `PUMPPORTAL_ENABLED=false`.
-- **Nightly rescore** — 03:00 UTC: `discover` (ATH refresh + new candidates) and a full
-  `score` pass, then the Helius webhook address list is refreshed.
+- **Unattended pipeline** — 03:00 UTC nightly (and on demand via the bot's `/scan`), the ingest
+  service runs the whole historical pipeline in-process: `discover` → `early-buyers --all` →
+  `funding --all` → `score`, then refreshes the Helius webhook address list. Each stage is
+  isolated, so a failing stage doesn't abort the rest, and every command is idempotent, so the
+  next pass resumes cleanly. Running the analyzer CLI by hand is therefore optional — useful for
+  a first backfill or a single token, not required for steady-state operation.
 
 Not implemented (by design, next iterations): fake-wallet/exit-liquidity ("baiter") detection and
 the Jupiter copy-trade module.

@@ -26,6 +26,8 @@ const HELP = [
   '/mute &lt;adres&gt; — alertleri sustur',
   '/unmute &lt;adres&gt; — alertleri aç',
   '/stats &lt;adres&gt; — cüzdan özeti',
+  '/scan — tam analiz turunu şimdi başlat (gece 03:00 UTC otomatik çalışır)',
+  '/tokens &lt;mint&gt;[,&lt;mint&gt;…] — aday token ekle, sonraki turda taranır',
 ].join('\n');
 
 const tierEmoji: Record<string, string> = {
@@ -122,6 +124,35 @@ export function registerCommands(bot: Bot, ctx: AppCtx): void {
   };
   bot.command('mute', setMuted(true));
   bot.command('unmute', setMuted(false));
+
+  bot.command('scan', async (c) => {
+    await ctx.systemQueue.add('nightly-rescore', {});
+    await c.reply(
+      [
+        '🔍 Analiz turu kuyruğa alındı: discover → early-buyers → funding → score.',
+        'Token sayısına göre dakikalar sürebilir; bittiğinde /list ile sonuçları görürsün.',
+      ].join('\n'),
+    );
+  });
+
+  bot.command('tokens', async (c) => {
+    const mints = (c.match ?? '')
+      .split(/[\s,]+/)
+      .map((m) => m.trim())
+      .filter(Boolean);
+    const valid = mints.filter((m) => isValidSolanaAddress(m));
+    if (valid.length === 0) {
+      await c.reply('Kullanım: /tokens <mint> [<mint> …]');
+      return;
+    }
+    await db
+      .insert(tokens)
+      .values(valid.map((mint) => ({ mint, status: 'candidate' as const })))
+      .onConflictDoNothing();
+    await c.reply(
+      `✅ ${valid.length} token aday olarak eklendi${mints.length > valid.length ? ` (${mints.length - valid.length} geçersiz atlandı)` : ''}. /scan ile taramayı başlatabilirsin.`,
+    );
+  });
 
   bot.command('stats', async (c) => {
     const address = (c.match ?? '').trim();

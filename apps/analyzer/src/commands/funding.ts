@@ -9,7 +9,14 @@ import {
   topFunders,
 } from '@insiderscope/shared';
 import type { AnalyzerCtx } from '../context';
-import { crawlTransfers, hasTransfersFor, loadEdgesTouching } from '../lib/funding-crawl';
+import { crawlTransfers, loadEdgesTouching } from '../lib/funding-crawl';
+
+/**
+ * Addresses already crawled in this process. `funding --all` walks 150+ wallets
+ * that share a handful of creators and funders; without this every wallet would
+ * re-crawl them.
+ */
+const crawledThisRun = new Set<string>();
 
 export async function runFundingAll(ctx: AnalyzerCtx): Promise<void> {
   const rows = await ctx.db
@@ -18,9 +25,17 @@ export async function runFundingAll(ctx: AnalyzerCtx): Promise<void> {
     .innerJoin(tokens, eq(positions.mint, tokens.mint))
     .where(and(eq(tokens.status, 'analyzed'), isNotNull(tokens.creatorWallet)));
   ctx.log(`funding: ${rows.length} wallet(s) with analyzed positions`);
+  let failed = 0;
   for (const { wallet } of rows) {
-    await runFunding(ctx, wallet);
+    // One unreachable wallet must not abandon the other 149.
+    try {
+      await runFunding(ctx, wallet);
+    } catch (err) {
+      failed += 1;
+      ctx.log(`funding ${shortAddr(wallet)} failed: ${err instanceof Error ? err.message : err}`);
+    }
   }
+  ctx.log(`funding: done (${rows.length - failed}/${rows.length} wallets processed)`);
 }
 
 /**
@@ -36,6 +51,7 @@ export async function runFunding(ctx: AnalyzerCtx, wallet: string): Promise<void
       id: positions.id,
       mint: positions.mint,
       creator: tokens.creatorWallet,
+      launchTs: tokens.launchTs,
       alreadyLinked: positions.creatorLinked,
     })
     .from(positions)
@@ -47,12 +63,30 @@ export async function runFunding(ctx: AnalyzerCtx, wallet: string): Promise<void
     return;
   }
 
-  await crawlTransfers(ctx, wallet);
+  // Anchor the crawl window to the earliest launch this wallet was early in —
+  // bundle funding happens shortly BEFORE launch, which for an older token is
+  // far outside any "last N days from now" window.
+  const launches = posRows
+    .map((p) => p.launchTs)
+    .filter((t): t is Date => t != null)
+    .map((t) => t.getTime());
+  const since =
+    launches.length > 0
+      ? new Date(Math.min(...launches) - cfg.FUNDING_LOOKBACK_DAYS * 86_400_000)
+      : new Date(Date.now() - 90 * 86_400_000);
+
+  const self = await crawlTransfers(ctx, wallet, { since });
+  if (!self.reachedWindow) {
+    log(
+      `${shortAddr(wallet)}: transfer history truncated at the page cap before ${since.toISOString().slice(0, 10)} — creator link may be missed (raise HELIUS_MAX_PAGES_WALLET)`,
+    );
+  }
 
   const creators = [...new Set(posRows.map((p) => p.creator!).filter((c) => c !== wallet))];
   for (const creator of creators) {
-    if (!(await hasTransfersFor(ctx, creator))) {
-      await crawlTransfers(ctx, creator, { maxPages: 5 });
+    if (!crawledThisRun.has(creator)) {
+      crawledThisRun.add(creator);
+      await crawlTransfers(ctx, creator, { since });
     }
   }
 
@@ -64,8 +98,9 @@ export async function runFunding(ctx: AnalyzerCtx, wallet: string): Promise<void
     isCex: isCexWallet,
   });
   for (const funder of funders) {
-    if (!(await hasTransfersFor(ctx, funder.address))) {
-      await crawlTransfers(ctx, funder.address, { maxPages: 3 });
+    if (!crawledThisRun.has(funder.address)) {
+      crawledThisRun.add(funder.address);
+      await crawlTransfers(ctx, funder.address, { since, maxPages: 3 });
     }
   }
 

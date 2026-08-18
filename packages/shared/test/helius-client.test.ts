@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { HeliusClient } from '../src/helius/client';
+import { HeliusClient, parseResumeSignature } from '../src/helius/client';
 import type { EnhancedTx } from '../src/helius/types';
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -81,6 +81,49 @@ describe('HeliusClient', () => {
     const all = await client.fetchHistoryOldestFirst('addr', { maxPages: 3 });
     expect(all).toHaveLength(300);
     expect(fetchImpl).toHaveBeenCalledTimes(3);
+  });
+
+  it('parses the resume signature out of a 404 body', () => {
+    const body = JSON.stringify({
+      error:
+        'Failed to find events within the search period. To continue search, query the API again with the `before-signature` parameter set to 2riWZnPQ3SgS8hkiAqDVUz1HQnbk3hucVzHhxsiA8qDGDmbbZFc8aZ453d2P2c4sbGkvWm9XXyUcWPmKLnVcE9sY.',
+    });
+    expect(parseResumeSignature(body)).toBe(
+      '2riWZnPQ3SgS8hkiAqDVUz1HQnbk3hucVzHhxsiA8qDGDmbbZFc8aZ453d2P2c4sbGkvWm9XXyUcWPmKLnVcE9sY',
+    );
+    expect(parseResumeSignature('{"error":"something else"}')).toBeNull();
+  });
+
+  it('keeps paging when a 404 carries a resume signature (sparse type-filtered history)', async () => {
+    // Helius answers "no events in this slot range" with 404 + a resume hint;
+    // treating it as fatal used to abort whole crawls mid-run.
+    const resume = '2riWZnPQ3SgS8hkiAqDVUz1HQnbk3hucVzHhxsiA8qDGDmbbZFc8aZ453d2P2c4sbGkvWm9XXyUcWPmKLnVcE9sY';
+    const fetchImpl = vi.fn(async (url: string | URL) => {
+      const before = new URL(String(url)).searchParams.get('before');
+      if (!before) {
+        return new Response(
+          JSON.stringify({
+            error: `Failed to find events within the search period. To continue search, query the API again with the \`before-signature\` parameter set to ${resume}.`,
+          }),
+          { status: 404 },
+        );
+      }
+      if (before === resume) return jsonResponse([fakeTx('deep-1'), fakeTx('deep-2')]);
+      return jsonResponse([]);
+    }) as unknown as typeof fetch;
+    const client = new HeliusClient({ apiKey: 'k', fetchImpl });
+
+    const all = await client.fetchHistoryOldestFirst('addr', { maxPages: 5, type: 'TRANSFER' });
+    expect(all.map((t) => t.signature)).toEqual(['deep-2', 'deep-1']);
+  });
+
+  it('treats a 404 without a resume hint as the end of history, not an error', async () => {
+    const fetchImpl = vi.fn(async () =>
+      new Response(JSON.stringify({ error: 'nothing here' }), { status: 404 }),
+    ) as unknown as typeof fetch;
+    const client = new HeliusClient({ apiKey: 'k', fetchImpl });
+
+    await expect(client.getParsedTransactions('addr')).resolves.toEqual([]);
   });
 
   it('unwraps rpc results and surfaces rpc errors', async () => {
