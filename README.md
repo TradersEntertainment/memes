@@ -233,8 +233,13 @@ and Redis. Migrations run automatically when ingest boots (`MIGRATE_ON_BOOT=true
 1. **Create a project** and add **PostgreSQL** and **Redis** (`New → Database`). Note their
    service names (usually `Postgres` and `Redis`).
 2. **Ingest service** — `New → GitHub Repo` (this repo). In *Settings → Config-as-code* set the
-   config file path to `apps/ingest/railway.json` (keep Root Directory at the repo root — the
-   pnpm lockfile lives there). Variables:
+   config file path to `apps/ingest/railway.json` and **redeploy** (keep Root Directory at the
+   repo root — the pnpm lockfile lives there). This step is not optional: without it the builder
+   has no start command for a workspace root and the build fails with
+   `No start command detected`. If the config file is not picked up for any reason, the
+   equivalent manual settings are *Settings → Deploy → Custom Start Command*
+   `pnpm --filter @insiderscope/ingest start` and *Settings → Build → Custom Build Command*
+   `pnpm install --frozen-lockfile`. Variables:
 
    | Variable | Value |
    |---|---|
@@ -248,8 +253,13 @@ and Redis. Migrations run automatically when ingest boots (`MIGRATE_ON_BOOT=true
    and once you hit *Settings → Networking → Generate Domain*, the webhook base URL is derived
    from `RAILWAY_PUBLIC_DOMAIN` automatically. Keep this service at **1 replica**.
 3. **Web service** — add a second service from the same repo, config file path
-   `apps/web/railway.json`. Variables: only `DATABASE_URL = ${{Postgres.DATABASE_URL}}`.
-   Generate a domain for it — that's your dashboard URL.
+   `apps/web/railway.json` (manual equivalent: build `pnpm --filter @insiderscope/web build`,
+   start `pnpm --filter @insiderscope/web start`). Variables: only
+   `DATABASE_URL = ${{Postgres.DATABASE_URL}}`. Generate a domain for it — that's your dashboard
+   URL.
+
+   The config files leave the builder unset so Railway's current default (Railpack) is used —
+   it detects the pnpm workspace and installs the pinned pnpm via Corepack on its own.
 4. **Analyzer one-offs** — open a shell into the ingest service (`railway ssh`, or the service's
    Console tab) and run the pipeline there:
    `pnpm analyzer import-tokens fixtures/tokens.sample.csv && pnpm analyzer early-buyers --all && pnpm analyzer funding --all && pnpm analyzer score`.
