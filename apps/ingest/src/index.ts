@@ -3,6 +3,7 @@ import { runMigrations } from '@insiderscope/db/migrate';
 import { getConfig, resolveIngestPort } from '@insiderscope/shared';
 import { startAlertWorker } from './alerts/queue';
 import { buildAppCtx } from './context';
+import { maybeAutoScan } from './jobs/nightly-rescore';
 import { scheduleRepeatables, startPipelineWorker, startSystemWorker } from './jobs/scheduler';
 import { buildServer } from './server';
 import { syncHeliusWebhook } from './webhook-sync';
@@ -37,6 +38,11 @@ async function main(): Promise<void> {
   await syncHeliusWebhook(ctx).catch((err) => ctx.log(`initial webhook sync failed: ${err}`));
 
   ctx.pumpPortal?.start();
+
+  // Self-starting analysis: if the candidate pool (seed list, /data CSVs, /tokens
+  // additions) holds unprocessed work, queue a pass now instead of waiting for
+  // 03:00 UTC. No-ops when nothing is pending or a pass is already running.
+  void maybeAutoScan(ctx, 'boot').catch((err) => ctx.log(`boot auto-scan failed: ${err}`));
 
   let shuttingDown = false;
   const shutdown = async (signal: string) => {

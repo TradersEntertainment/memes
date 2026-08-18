@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { HeliusClient, parseResumeSignature } from '../src/helius/client';
+import { HeliusCircuitOpenError, HeliusClient, parseResumeSignature } from '../src/helius/client';
 import type { EnhancedTx } from '../src/helius/types';
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -161,5 +161,57 @@ describe('rate limiting', () => {
     expect(Date.now() - start).toBeGreaterThanOrEqual(1800);
     const firstSecond = times.filter((t) => t - start < 1000).length;
     expect(firstSecond).toBeLessThanOrEqual(4);
+  });
+});
+
+describe('credit/rate circuit breaker', () => {
+  it('opens immediately on 402/403 (credits exhausted) and fast-fails until cooldown', async () => {
+    const fetchImpl = vi.fn(async () => new Response('payment required', { status: 402 }));
+    const client = new HeliusClient({ apiKey: 'k', fetchImpl: fetchImpl as unknown as typeof fetch, baseDelayMs: 1 });
+
+    await expect(client.getParsedTransactions('addr')).rejects.toThrow(/402/);
+    expect(client.circuitState()?.reason).toMatch(/credits exhausted/);
+
+    // subsequent calls fail fast without touching the network
+    const callsBefore = fetchImpl.mock.calls.length;
+    await expect(client.getParsedTransactions('addr2')).rejects.toBeInstanceOf(HeliusCircuitOpenError);
+    expect(fetchImpl.mock.calls.length).toBe(callsBefore);
+  });
+
+  it('opens after a streak of post-retry failures and closes again after a success', async () => {
+    let healthy = false;
+    const fetchImpl = vi.fn(async () =>
+      healthy ? jsonResponse([]) : new Response('rate limited', { status: 429 }),
+    );
+    const client = new HeliusClient({
+      apiKey: 'k',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      baseDelayMs: 1,
+      maxRetries: 0,
+      circuitThreshold: 3,
+      circuitCooldownMs: 50,
+    });
+
+    for (let i = 0; i < 3; i++) {
+      await expect(client.getParsedTransactions(`w${i}`)).rejects.toThrow(/429/);
+    }
+    expect(client.circuitState()).not.toBeNull();
+    await expect(client.getParsedTransactions('w9')).rejects.toBeInstanceOf(HeliusCircuitOpenError);
+
+    await new Promise((r) => setTimeout(r, 60)); // cooldown elapses
+    healthy = true;
+    await expect(client.getParsedTransactions('w10')).resolves.toEqual([]);
+    expect(client.circuitState()).toBeNull();
+  });
+
+  it('history-paging 404s never trip the circuit', async () => {
+    const fetchImpl = vi.fn(async () =>
+      new Response(JSON.stringify({ error: 'nothing here' }), { status: 404 }),
+    ) as unknown as typeof fetch;
+    const client = new HeliusClient({ apiKey: 'k', fetchImpl, circuitThreshold: 1 });
+
+    await expect(client.getParsedTransactions('a')).resolves.toEqual([]);
+    await expect(client.getParsedTransactions('b')).resolves.toEqual([]);
+    expect(client.circuitState()).toBeNull();
   });
 });

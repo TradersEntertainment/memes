@@ -3,6 +3,7 @@ import {
   buildTransferGraph,
   cexLabel,
   findCreatorLink,
+  HeliusCircuitOpenError,
   isCexWallet,
   primaryFunder,
   shortAddr,
@@ -27,10 +28,12 @@ export async function runFundingAll(ctx: AnalyzerCtx): Promise<void> {
   ctx.log(`funding: ${rows.length} wallet(s) with analyzed positions`);
   let failed = 0;
   for (const { wallet } of rows) {
-    // One unreachable wallet must not abandon the other 149.
+    // One unreachable wallet must not abandon the other 149 — but an open
+    // credit circuit means every remaining wallet would fail too; abort.
     try {
       await runFunding(ctx, wallet);
     } catch (err) {
+      if (err instanceof HeliusCircuitOpenError) throw err;
       failed += 1;
       ctx.log(`funding ${shortAddr(wallet)} failed: ${err instanceof Error ? err.message : err}`);
     }

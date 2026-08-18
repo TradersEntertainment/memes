@@ -16,6 +16,7 @@ import {
 } from '@insiderscope/shared';
 import type { Bot, CommandContext, Context } from 'grammy';
 import type { AppCtx } from '../context';
+import { maybeAutoScan } from '../jobs/nightly-rescore';
 import { invalidateWatchedCache } from '../watched';
 import { syncHeliusWebhook } from '../webhook-sync';
 
@@ -126,13 +127,13 @@ export function registerCommands(bot: Bot, ctx: AppCtx): void {
   bot.command('unmute', setMuted(false));
 
   bot.command('scan', async (c) => {
-    await ctx.pipelineQueue.add('pipeline', {});
-    await c.reply(
-      [
-        '🔍 Analiz turu kuyruğa alındı: discover → early-buyers → funding → score.',
-        'Token sayısına göre dakikalar sürebilir; bittiğinde /list ile sonuçları görürsün.',
-      ].join('\n'),
-    );
+    const counts = await ctx.pipelineQueue.getJobCounts('active', 'waiting', 'delayed');
+    if ((counts.active ?? 0) + (counts.waiting ?? 0) + (counts.delayed ?? 0) > 0) {
+      await c.reply('⏳ Bir analiz turu zaten çalışıyor/kuyrukta — bittiğinde haber vereceğim.');
+      return;
+    }
+    await ctx.pipelineQueue.add('pipeline', { reason: 'manual' });
+    await c.reply('🔍 Analiz turu kuyruğa alındı — başlarken ve biterken buradan bildireceğim.');
   });
 
   bot.command('tokens', async (c) => {
@@ -149,8 +150,11 @@ export function registerCommands(bot: Bot, ctx: AppCtx): void {
       .insert(tokens)
       .values(valid.map((mint) => ({ mint, status: 'candidate' as const })))
       .onConflictDoNothing();
+    const queued = await maybeAutoScan(ctx, 'tokens-added').catch(() => false);
     await c.reply(
-      `✅ ${valid.length} token aday olarak eklendi${mints.length > valid.length ? ` (${mints.length - valid.length} geçersiz atlandı)` : ''}. /scan ile taramayı başlatabilirsin.`,
+      `✅ ${valid.length} token aday olarak eklendi${mints.length > valid.length ? ` (${mints.length - valid.length} geçersiz atlandı)` : ''}. ${
+        queued ? 'Tarama otomatik başlatıldı.' : 'Sıradaki turda taranacak.'
+      }`,
     );
   });
 

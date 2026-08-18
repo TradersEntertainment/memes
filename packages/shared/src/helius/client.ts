@@ -40,6 +40,21 @@ export class HeliusHttpError extends Error {
 }
 
 /**
+ * Thrown fast (no network, no retries) while the credit/rate circuit is open.
+ * Batch loops treat it as "stop the whole run and come back later" — retrying
+ * 250 wallets against an exhausted API only burns time and retry budget.
+ */
+export class HeliusCircuitOpenError extends Error {
+  constructor(
+    readonly untilTs: number,
+    readonly reason: string,
+  ) {
+    super(`Helius circuit open until ${new Date(untilTs).toISOString()}: ${reason}`);
+    this.name = 'HeliusCircuitOpenError';
+  }
+}
+
+/**
  * Helius answers a history page with no events in the searched slot range with
  * HTTP 404 plus the signature to resume from — a "keep paging" signal, not an
  * error. Returns that signature when the body carries one.
@@ -56,6 +71,10 @@ export interface HeliusClientOptions {
   requestsPerSecond?: number;
   maxRetries?: number;
   baseDelayMs?: number;
+  /** Consecutive post-retry failures before the circuit opens (default 8). */
+  circuitThreshold?: number;
+  /** How long the circuit stays open after repeated failures (default 15 min). */
+  circuitCooldownMs?: number;
   fetchImpl?: typeof fetch;
   log?: (msg: string) => void;
 }
@@ -70,8 +89,17 @@ export class HeliusClient {
   private readonly apiKey: string;
   private readonly maxRetries: number;
   private readonly baseDelayMs: number;
+  private readonly circuitThreshold: number;
+  private readonly circuitCooldownMs: number;
   private readonly fetchImpl: typeof fetch;
   private readonly log?: (msg: string) => void;
+
+  // Credit/rate circuit breaker. 401/402/403 (bad key, credits exhausted) open
+  // it immediately for an hour; a streak of post-retry failures (typically 429s
+  // that never clear) opens it for the cooldown. Any success closes it.
+  private consecutiveFailures = 0;
+  private circuitOpenUntil = 0;
+  private circuitReason = '';
 
   constructor(opts: HeliusClientOptions) {
     if (!opts.apiKey) {
@@ -90,8 +118,45 @@ export class HeliusClient {
     });
     this.maxRetries = opts.maxRetries ?? 5;
     this.baseDelayMs = opts.baseDelayMs ?? 500;
+    this.circuitThreshold = opts.circuitThreshold ?? 8;
+    this.circuitCooldownMs = opts.circuitCooldownMs ?? 15 * 60_000;
     this.fetchImpl = opts.fetchImpl ?? fetch;
     this.log = opts.log;
+  }
+
+  /** Non-null while the credit/rate circuit is open. */
+  circuitState(): { untilTs: number; reason: string } | null {
+    return Date.now() < this.circuitOpenUntil
+      ? { untilTs: this.circuitOpenUntil, reason: this.circuitReason }
+      : null;
+  }
+
+  private assertCircuitClosed(): void {
+    const open = this.circuitState();
+    if (open) throw new HeliusCircuitOpenError(open.untilTs, open.reason);
+  }
+
+  private openCircuit(durationMs: number, reason: string): void {
+    this.circuitOpenUntil = Date.now() + durationMs;
+    this.circuitReason = reason;
+    this.consecutiveFailures = 0;
+    this.log?.(
+      `helius circuit OPEN for ${Math.round(durationMs / 60_000)}min — ${reason}`,
+    );
+  }
+
+  private recordTerminalFailure(err: unknown): void {
+    if (err instanceof HeliusHttpError && [401, 402, 403].includes(err.status)) {
+      this.openCircuit(60 * 60_000, `HTTP ${err.status} — api key invalid or credits exhausted`);
+      return;
+    }
+    this.consecutiveFailures += 1;
+    if (this.consecutiveFailures >= this.circuitThreshold) {
+      this.openCircuit(
+        this.circuitCooldownMs,
+        `${this.consecutiveFailures} consecutive failures after retries (rate limit or outage)`,
+      );
+    }
   }
 
   private sanitize(url: string): string {
@@ -99,6 +164,7 @@ export class HeliusClient {
   }
 
   private async requestRaw<T>(url: string, init?: RequestInit): Promise<T> {
+    this.assertCircuitClosed();
     for (let attempt = 0; ; attempt++) {
       let res: Response | null = null;
       let netErr: unknown = null;
@@ -108,6 +174,7 @@ export class HeliusClient {
         netErr = err;
       }
       if (res?.ok) {
+        this.consecutiveFailures = 0;
         return (await res.json()) as T;
       }
       const retryable = netErr != null || res!.status === 429 || res!.status >= 500;
@@ -126,18 +193,24 @@ export class HeliusClient {
         continue;
       }
       if (netErr) {
-        throw netErr instanceof Error ? netErr : new Error(String(netErr));
+        const wrapped = netErr instanceof Error ? netErr : new Error(String(netErr));
+        this.recordTerminalFailure(wrapped);
+        throw wrapped;
       }
       const body = await res!.text();
-      throw new HeliusHttpError(
+      const httpErr = new HeliusHttpError(
         `Helius request failed (${res!.status}) ${this.sanitize(url)}: ${body.slice(0, 300)}`,
         res!.status,
         body,
       );
+      // 404 is a paging signal on history endpoints, never an availability problem.
+      if (res!.status !== 404) this.recordTerminalFailure(httpErr);
+      throw httpErr;
     }
   }
 
   private request<T>(url: string, init?: RequestInit): Promise<T> {
+    this.assertCircuitClosed(); // fast-fail before joining the rate-limited queue
     return this.queue.add(() => this.requestRaw<T>(url, init)) as Promise<T>;
   }
 

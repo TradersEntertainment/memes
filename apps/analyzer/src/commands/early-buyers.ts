@@ -3,6 +3,7 @@ import {
   deriveBondingCurvePda,
   ensureSolPriceRange,
   getLiveMcFromDexscreener,
+  HeliusCircuitOpenError,
   detectLaunch,
   mcUsdAt,
   PUMPFUN_TOTAL_SUPPLY,
@@ -21,7 +22,15 @@ export async function runEarlyBuyersAll(ctx: AnalyzerCtx): Promise<void> {
     .where(eq(tokens.status, 'candidate'));
   ctx.log(`early-buyers: ${candidates.length} candidate token(s)`);
   for (const { mint } of candidates) {
-    await runEarlyBuyers(ctx, mint);
+    try {
+      await runEarlyBuyers(ctx, mint);
+    } catch (err) {
+      // Circuit open = API credits/limit gone: abort the stage, the next pass
+      // resumes from the remaining 'candidate' rows. Anything else is one bad
+      // token — log and keep going.
+      if (err instanceof HeliusCircuitOpenError) throw err;
+      ctx.log(`early-buyers ${mint} failed: ${err instanceof Error ? err.message : err}`);
+    }
   }
 }
 

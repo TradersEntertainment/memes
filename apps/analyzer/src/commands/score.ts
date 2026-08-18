@@ -12,6 +12,7 @@ import {
 import {
   ensureSolPriceRange,
   getSolPriceUsdAt,
+  HeliusCircuitOpenError,
   scoreWallet,
   scoringConfig,
   shortAddr,
@@ -32,12 +33,32 @@ export async function runScoreAll(ctx: AnalyzerCtx): Promise<void> {
     .from(wallets)
     .where(and(inArray(wallets.tier, ['insider', 'watch']), eq(wallets.isActive, true)));
 
-  const all = [...new Set([...withPositions, ...tiered].map((r) => r.address))];
-  ctx.log(`score: ${all.length} wallet(s) to score`);
+  const union = [...new Set([...withPositions, ...tiered].map((r) => r.address))];
+
+  // Credit budget: a full-history refetch per wallet per night adds up fast.
+  // Skip wallets that were scored recently AND have shown no activity since —
+  // their inputs cannot have changed. New activity or a stale score reruns them.
+  const staleBefore = new Date(Date.now() - ctx.cfg.SCORE_REFRESH_DAYS * 86_400_000);
+  const rows =
+    union.length > 0
+      ? await ctx.db.select().from(wallets).where(inArray(wallets.address, union))
+      : [];
+  const byAddress = new Map(rows.map((r) => [r.address, r]));
+  const all = union.filter((address) => {
+    const w = byAddress.get(address);
+    if (!w || w.insiderScore == null || !w.updatedAt) return true; // never scored
+    if (w.updatedAt < staleBefore) return true; // score too old
+    return w.lastActivityTs != null && w.lastActivityTs > w.updatedAt; // traded since
+  });
+
+  ctx.log(
+    `score: ${all.length} wallet(s) to score (${union.length - all.length} fresh, skipped)`,
+  );
   for (const address of all) {
     try {
       await runScoreWallet(ctx, address);
     } catch (err) {
+      if (err instanceof HeliusCircuitOpenError) throw err; // credits gone — stop the stage
       ctx.log(`score ${shortAddr(address)} failed: ${err}`);
     }
   }

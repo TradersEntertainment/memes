@@ -76,6 +76,8 @@ const EnvSchema = z.object({
   SCORE_MAX_TRADES: z.coerce.number().int().positive().default(500),
   /** Trade count at which the selectivity factor reaches zero. */
   SCORE_SELECTIVITY_TRADES: z.coerce.number().int().positive().default(200),
+  /** Rescore a wallet at most this often unless it traded in the meantime. */
+  SCORE_REFRESH_DAYS: z.coerce.number().positive().default(3),
   PUMPPORTAL_ENABLED: boolFromEnv(true),
   DISCOVER_MIN_MC_USD: z.coerce.number().positive().default(10_000_000),
   SOL_PRICE_FALLBACK_USD: z

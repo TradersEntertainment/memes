@@ -3,7 +3,7 @@ import { makeBullConnection } from '../alerts/queue';
 import type { AppCtx } from '../context';
 import type { RotationCheckJobData } from '../pipeline/rotation';
 import { PIPELINE_QUEUE, SYSTEM_QUEUE } from '../system-queue';
-import { nightlyRescore } from './nightly-rescore';
+import { nightlyRescore, type PipelineReason } from './nightly-rescore';
 import { sweepProbation } from './probation-expiry';
 import { reconcile } from './reconcile';
 import { runRotationCheck } from './rotation-check';
@@ -36,8 +36,8 @@ export function startSystemWorker(ctx: AppCtx): Worker {
 export function startPipelineWorker(ctx: AppCtx): Worker {
   const worker = new Worker(
     PIPELINE_QUEUE,
-    async () => {
-      await nightlyRescore(ctx);
+    async (job) => {
+      await nightlyRescore(ctx, (job.data as { reason?: PipelineReason })?.reason ?? 'nightly');
     },
     { connection: makeBullConnection(ctx.cfg.REDIS_URL), concurrency: 1 },
   );
@@ -60,7 +60,7 @@ export async function scheduleRepeatables(ctx: AppCtx): Promise<void> {
   await ctx.pipelineQueue.upsertJobScheduler(
     'nightly-pipeline',
     { pattern: '0 3 * * *', tz: 'UTC' },
-    { name: 'pipeline' },
+    { name: 'pipeline', data: { reason: 'nightly' } },
   );
   // Drop the pre-split schedule so upgraded deployments don't keep running the
   // pipeline on the latency-sensitive queue.
