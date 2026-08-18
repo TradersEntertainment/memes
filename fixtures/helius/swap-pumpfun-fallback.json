@@ -1,0 +1,42 @@
+{
+  "signature": "SigPumpfunFa11back11111111111111111111111111",
+  "timestamp": 1755500180,
+  "slot": 362000450,
+  "type": "SWAP",
+  "source": "PUMP_FUN",
+  "feePayer": "ThirdBuyerAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  "fee": 5000,
+  "transactionError": null,
+  "description": "",
+  "nativeTransfers": [
+    {
+      "fromUserAccount": "ThirdBuyerAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "toUserAccount": "BondingCurvePdaAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "amount": 1000000000
+    },
+    {
+      "fromUserAccount": "ThirdBuyerAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "toUserAccount": "PumpfunFeeVau1tAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "amount": 10000000
+    }
+  ],
+  "tokenTransfers": [
+    {
+      "fromUserAccount": "BondingCurvePdaAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "toUserAccount": "ThirdBuyerAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "fromTokenAccount": "CurveTokenAccountAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "toTokenAccount": "Buyer3TokenAccountAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "mint": "MemeCoinMintAAAAAAAAAAAAAAAAAAAAAAAAAAAApump",
+      "tokenAmount": 35714285.71,
+      "tokenStandard": "Fungible"
+    }
+  ],
+  "events": {},
+  "instructions": [
+    {
+      "programId": "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P",
+      "accounts": [],
+      "data": ""
+    }
+  ]
+}

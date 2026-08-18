@@ -1,0 +1,60 @@
+{
+  "signature": "SigSwapBuyEvents1111111111111111111111111111",
+  "timestamp": 1755500240,
+  "slot": 362000600,
+  "type": "SWAP",
+  "source": "RAYDIUM",
+  "feePayer": "FirstBuyerAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  "fee": 5000,
+  "transactionError": null,
+  "description": "FirstBuyer swapped 2.5 SOL for 12500000 MEME",
+  "nativeTransfers": [
+    {
+      "fromUserAccount": "FirstBuyerAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "toUserAccount": "RaydiumPoolVaultAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "amount": 2500000000
+    }
+  ],
+  "tokenTransfers": [
+    {
+      "fromUserAccount": "RaydiumPoolVaultAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "toUserAccount": "FirstBuyerAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "fromTokenAccount": "PoolTokenAccountAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "toTokenAccount": "BuyerTokenAccountAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "mint": "MemeCoinMintAAAAAAAAAAAAAAAAAAAAAAAAAAAApump",
+      "tokenAmount": 12500000,
+      "tokenStandard": "Fungible"
+    }
+  ],
+  "events": {
+    "swap": {
+      "nativeInput": {
+        "account": "FirstBuyerAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "amount": "2500000000"
+      },
+      "nativeOutput": null,
+      "tokenInputs": [],
+      "tokenOutputs": [
+        {
+          "userAccount": "FirstBuyerAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "tokenAccount": "BuyerTokenAccountAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "mint": "MemeCoinMintAAAAAAAAAAAAAAAAAAAAAAAAAAAApump",
+          "rawTokenAmount": {
+            "tokenAmount": "12500000000000",
+            "decimals": 6
+          }
+        }
+      ],
+      "tokenFees": [],
+      "nativeFees": [],
+      "innerSwaps": []
+    }
+  },
+  "instructions": [
+    {
+      "programId": "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8",
+      "accounts": [],
+      "data": ""
+    }
+  ]
+}

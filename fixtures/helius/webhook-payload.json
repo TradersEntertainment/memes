@@ -1,0 +1,141 @@
+[
+  {
+    "signature": "SigWebhookBuy1111111111111111111111111111111",
+    "timestamp": 1755500240,
+    "slot": 362000600,
+    "type": "SWAP",
+    "source": "PUMP_FUN",
+    "feePayer": "WatchedWa11etAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "fee": 5000,
+    "transactionError": null,
+    "description": "WatchedWallet bought MEME",
+    "nativeTransfers": [
+      {
+        "fromUserAccount": "WatchedWa11etAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "toUserAccount": "BondingCurvePdaAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "amount": 12500000000
+      }
+    ],
+    "tokenTransfers": [
+      {
+        "fromUserAccount": "BondingCurvePdaAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "toUserAccount": "WatchedWa11etAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "fromTokenAccount": "CurveTokenAccountAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "toTokenAccount": "WatchedTokenAccountAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "mint": "MemeCoinMintAAAAAAAAAAAAAAAAAAAAAAAAAAAApump",
+        "tokenAmount": 178571428.57,
+        "tokenStandard": "Fungible"
+      }
+    ],
+    "events": {
+      "swap": {
+        "nativeInput": {
+          "account": "WatchedWa11etAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "amount": "12500000000"
+        },
+        "nativeOutput": null,
+        "tokenInputs": [],
+        "tokenOutputs": [
+          {
+            "userAccount": "WatchedWa11etAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "tokenAccount": "WatchedTokenAccountAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "mint": "MemeCoinMintAAAAAAAAAAAAAAAAAAAAAAAAAAAApump",
+            "rawTokenAmount": {
+              "tokenAmount": "178571428570000",
+              "decimals": 6
+            }
+          }
+        ],
+        "tokenFees": [],
+        "nativeFees": [],
+        "innerSwaps": []
+      }
+    },
+    "instructions": [
+      {
+        "programId": "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P",
+        "accounts": [],
+        "data": ""
+      }
+    ]
+  },
+  {
+    "signature": "SigWebhookTransfer11111111111111111111111111",
+    "timestamp": 1755600000,
+    "slot": 362250000,
+    "type": "TRANSFER",
+    "source": "SYSTEM_PROGRAM",
+    "feePayer": "WatchedWa11etAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "fee": 5000,
+    "transactionError": null,
+    "description": "WatchedWallet transferred 8 SOL",
+    "nativeTransfers": [
+      {
+        "fromUserAccount": "WatchedWa11etAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "toUserAccount": "FreshRotationTargetAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "amount": 8000000000
+      }
+    ],
+    "tokenTransfers": [],
+    "events": {},
+    "instructions": [
+      {
+        "programId": "11111111111111111111111111111111",
+        "accounts": [],
+        "data": ""
+      }
+    ]
+  },
+  {
+    "signature": "SigWebhookOtherTrader111111111111111111111111",
+    "timestamp": 1755600100,
+    "slot": 362250250,
+    "type": "SWAP",
+    "source": "RAYDIUM",
+    "feePayer": "RandomTraderAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "fee": 5000,
+    "transactionError": null,
+    "description": "unwatched trader swap",
+    "nativeTransfers": [],
+    "tokenTransfers": [],
+    "events": {
+      "swap": {
+        "nativeInput": {
+          "account": "RandomTraderAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "amount": "500000000"
+        },
+        "nativeOutput": null,
+        "tokenInputs": [],
+        "tokenOutputs": [
+          {
+            "userAccount": "RandomTraderAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "tokenAccount": "RandomTokenAccountAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "mint": "MemeCoinMintAAAAAAAAAAAAAAAAAAAAAAAAAAAApump",
+            "rawTokenAmount": {
+              "tokenAmount": "5000000000000",
+              "decimals": 6
+            }
+          }
+        ],
+        "tokenFees": [],
+        "nativeFees": [],
+        "innerSwaps": []
+      }
+    },
+    "instructions": []
+  },
+  {
+    "signature": "SigWebhookFai1edTx11111111111111111111111111",
+    "timestamp": 1755600200,
+    "slot": 362250500,
+    "type": "SWAP",
+    "source": "RAYDIUM",
+    "feePayer": "WatchedWa11etAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "fee": 5000,
+    "transactionError": { "InstructionError": [2, { "Custom": 6001 }] },
+    "nativeTransfers": [],
+    "tokenTransfers": [],
+    "events": {},
+    "instructions": []
+  }
+]

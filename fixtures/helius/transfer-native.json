@@ -1,0 +1,27 @@
+{
+  "signature": "SigTransferNative111111111111111111111111111",
+  "timestamp": 1755600000,
+  "slot": 362250000,
+  "type": "TRANSFER",
+  "source": "SYSTEM_PROGRAM",
+  "feePayer": "WatchedWa11etAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  "fee": 5000,
+  "transactionError": null,
+  "description": "WatchedWallet transferred 8 SOL",
+  "nativeTransfers": [
+    {
+      "fromUserAccount": "WatchedWa11etAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "toUserAccount": "FreshRotationTargetAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "amount": 8000000000
+    }
+  ],
+  "tokenTransfers": [],
+  "events": {},
+  "instructions": [
+    {
+      "programId": "11111111111111111111111111111111",
+      "accounts": [],
+      "data": ""
+    }
+  ]
+}

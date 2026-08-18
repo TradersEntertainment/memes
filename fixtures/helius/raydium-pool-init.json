@@ -1,0 +1,21 @@
+{
+  "signature": "SigRaydiumPoo1Init11111111111111111111111111",
+  "timestamp": 1755400000,
+  "slot": 361750000,
+  "type": "CREATE_POOL",
+  "source": "RAYDIUM",
+  "feePayer": "RaydiumDep1oyerAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  "fee": 5000,
+  "transactionError": null,
+  "description": "RaydiumDeployer initialized a pool",
+  "nativeTransfers": [],
+  "tokenTransfers": [],
+  "events": {},
+  "instructions": [
+    {
+      "programId": "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8",
+      "accounts": [],
+      "data": ""
+    }
+  ]
+}

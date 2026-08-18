@@ -1,0 +1,37 @@
+{
+  "signature": "SigPumpfunCreate1111111111111111111111111111",
+  "timestamp": 1755500000,
+  "slot": 362000000,
+  "type": "CREATE",
+  "source": "PUMP_FUN",
+  "feePayer": "CreatorDevAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  "fee": 5000,
+  "transactionError": null,
+  "description": "CreatorDev created MEME on pump.fun",
+  "nativeTransfers": [
+    {
+      "fromUserAccount": "CreatorDevAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "toUserAccount": "BondingCurvePdaAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "amount": 2000000000
+    }
+  ],
+  "tokenTransfers": [
+    {
+      "fromUserAccount": "BondingCurvePdaAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "toUserAccount": "CreatorDevAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "fromTokenAccount": "CurveTokenAccountAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "toTokenAccount": "CreatorTokenAccountAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "mint": "MemeCoinMintAAAAAAAAAAAAAAAAAAAAAAAAAAAApump",
+      "tokenAmount": 60000000,
+      "tokenStandard": "Fungible"
+    }
+  ],
+  "events": {},
+  "instructions": [
+    {
+      "programId": "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P",
+      "accounts": [],
+      "data": ""
+    }
+  ]
+}

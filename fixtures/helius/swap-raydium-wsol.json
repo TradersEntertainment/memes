@@ -1,0 +1,64 @@
+{
+  "signature": "SigSwapWso1Route1111111111111111111111111111",
+  "timestamp": 1755500300,
+  "slot": 362000750,
+  "type": "SWAP",
+  "source": "JUPITER",
+  "feePayer": "SecondBuyerAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  "fee": 5000,
+  "transactionError": null,
+  "description": "SecondBuyer swapped 3 wSOL for 1000000 MEME",
+  "nativeTransfers": [],
+  "tokenTransfers": [
+    {
+      "fromUserAccount": "SecondBuyerAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "toUserAccount": "RaydiumPoolVaultAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "fromTokenAccount": "BuyerWso1AccountAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "toTokenAccount": "PoolWso1AccountAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "mint": "So11111111111111111111111111111111111111112",
+      "tokenAmount": 3,
+      "tokenStandard": "Fungible"
+    },
+    {
+      "fromUserAccount": "RaydiumPoolVaultAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "toUserAccount": "SecondBuyerAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "fromTokenAccount": "PoolTokenAccountAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "toTokenAccount": "Buyer2TokenAccountAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "mint": "MemeCoinMintAAAAAAAAAAAAAAAAAAAAAAAAAAAApump",
+      "tokenAmount": 1000000,
+      "tokenStandard": "Fungible"
+    }
+  ],
+  "events": {
+    "swap": {
+      "nativeInput": null,
+      "nativeOutput": null,
+      "tokenInputs": [
+        {
+          "userAccount": "SecondBuyerAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "tokenAccount": "BuyerWso1AccountAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "mint": "So11111111111111111111111111111111111111112",
+          "rawTokenAmount": {
+            "tokenAmount": "3000000000",
+            "decimals": 9
+          }
+        }
+      ],
+      "tokenOutputs": [
+        {
+          "userAccount": "SecondBuyerAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "tokenAccount": "Buyer2TokenAccountAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "mint": "MemeCoinMintAAAAAAAAAAAAAAAAAAAAAAAAAAAApump",
+          "rawTokenAmount": {
+            "tokenAmount": "1000000000000",
+            "decimals": 6
+          }
+        }
+      ],
+      "tokenFees": [],
+      "nativeFees": [],
+      "innerSwaps": []
+    }
+  },
+  "instructions": []
+}
