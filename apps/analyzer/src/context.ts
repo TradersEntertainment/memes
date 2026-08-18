@@ -23,6 +23,7 @@ export function buildCtx(): AnalyzerCtx {
         helius = new HeliusClient({
           apiKey: cfg.HELIUS_API_KEY,
           concurrency: cfg.HELIUS_CONCURRENCY,
+          requestsPerSecond: cfg.HELIUS_RPS,
           log,
         });
       }

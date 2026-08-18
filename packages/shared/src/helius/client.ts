@@ -52,6 +52,8 @@ export function parseResumeSignature(body: string): string | null {
 export interface HeliusClientOptions {
   apiKey: string;
   concurrency?: number;
+  /** Hard ceiling on requests per second — the thing that actually prevents 429s. */
+  requestsPerSecond?: number;
   maxRetries?: number;
   baseDelayMs?: number;
   fetchImpl?: typeof fetch;
@@ -76,7 +78,16 @@ export class HeliusClient {
       throw new Error('HELIUS_API_KEY is not set — add it to .env');
     }
     this.apiKey = opts.apiKey;
-    this.queue = new PQueue({ concurrency: opts.concurrency ?? 5 });
+    // Concurrency alone cannot prevent 429s: five slots each finishing in ~150ms
+    // is ~30 req/s, far above a small plan's ceiling. The interval cap is what
+    // keeps the crawl inside the plan's budget, so retries stay rare.
+    const rps = opts.requestsPerSecond ?? 10;
+    this.queue = new PQueue({
+      concurrency: opts.concurrency ?? 5,
+      interval: 1000,
+      intervalCap: rps,
+      carryoverConcurrencyCount: true,
+    });
     this.maxRetries = opts.maxRetries ?? 5;
     this.baseDelayMs = opts.baseDelayMs ?? 500;
     this.fetchImpl = opts.fetchImpl ?? fetch;

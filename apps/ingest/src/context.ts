@@ -35,7 +35,12 @@ export function buildAppCtx(): AppCtx {
 
   const redis = new IORedis(cfg.REDIS_URL, { maxRetriesPerRequest: null });
   const helius = cfg.HELIUS_API_KEY
-    ? new HeliusClient({ apiKey: cfg.HELIUS_API_KEY, concurrency: cfg.HELIUS_CONCURRENCY, log })
+    ? new HeliusClient({
+        apiKey: cfg.HELIUS_API_KEY,
+        concurrency: cfg.HELIUS_CONCURRENCY,
+        requestsPerSecond: cfg.HELIUS_RPS,
+        log,
+      })
     : null;
   if (!helius) log('HELIUS_API_KEY not set — webhook registration and reconciliation disabled');
 

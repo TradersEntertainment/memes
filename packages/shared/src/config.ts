@@ -52,8 +52,17 @@ const EnvSchema = z.object({
   ALERT_MAX_AGE_MIN: z.coerce.number().positive().default(15),
   RECONCILE_INTERVAL_MIN: z.coerce.number().positive().default(5),
   HELIUS_CONCURRENCY: z.coerce.number().int().positive().default(5),
+  /** Requests per second ceiling — match your Helius plan (free ≈ 10, paid higher). */
+  HELIUS_RPS: z.coerce.number().int().positive().default(10),
   HELIUS_MAX_PAGES_TOKEN: z.coerce.number().int().positive().default(300),
   HELIUS_MAX_PAGES_WALLET: z.coerce.number().int().positive().default(20),
+  /**
+   * Page cap for funding-graph crawls. Deliberately lower than the wallet cap:
+   * a dormant insider wallet reaches the launch window in a few pages, while a
+   * hyperactive one never will — and it gets blacklisted on trade count anyway,
+   * so paging deep into it only burns credits.
+   */
+  FUNDING_MAX_PAGES: z.coerce.number().int().positive().default(8),
   FUNDING_MAX_FUNDERS: z.coerce.number().int().positive().default(10),
   /** Days before a token's launch to include when crawling funding transfers. */
   FUNDING_LOOKBACK_DAYS: z.coerce.number().positive().default(30),

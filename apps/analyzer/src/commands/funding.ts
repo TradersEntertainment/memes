@@ -75,7 +75,7 @@ export async function runFunding(ctx: AnalyzerCtx, wallet: string): Promise<void
       ? new Date(Math.min(...launches) - cfg.FUNDING_LOOKBACK_DAYS * 86_400_000)
       : new Date(Date.now() - 90 * 86_400_000);
 
-  const self = await crawlTransfers(ctx, wallet, { since });
+  const self = await crawlTransfers(ctx, wallet, { since, maxPages: cfg.FUNDING_MAX_PAGES });
   if (!self.reachedWindow) {
     log(
       `${shortAddr(wallet)}: transfer history truncated at the page cap before ${since.toISOString().slice(0, 10)} — creator link may be missed (raise HELIUS_MAX_PAGES_WALLET)`,
@@ -86,7 +86,7 @@ export async function runFunding(ctx: AnalyzerCtx, wallet: string): Promise<void
   for (const creator of creators) {
     if (!crawledThisRun.has(creator)) {
       crawledThisRun.add(creator);
-      await crawlTransfers(ctx, creator, { since });
+      await crawlTransfers(ctx, creator, { since, maxPages: cfg.FUNDING_MAX_PAGES });
     }
   }
 
