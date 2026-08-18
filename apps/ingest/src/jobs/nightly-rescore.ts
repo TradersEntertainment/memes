@@ -1,5 +1,7 @@
 import {
   buildCtx as buildAnalyzerCtx,
+  crawlableCandidatesWhere,
+  repairMislabeledTokens,
   runDiscover,
   runEarlyBuyersAll,
   runFundingAll,
@@ -19,7 +21,7 @@ const REASON_TR: Record<PipelineReason, string> = {
   nightly: 'gece planı (03:00 UTC)',
   manual: '/scan komutu',
   'tokens-added': 'yeni token eklendi',
-  'ath-cross': 'bir token $10M eşiğini geçti',
+  'ath-cross': 'bir token MC eşiğini geçti',
 };
 
 /** Telegram + log in one place; the pipeline must never die on a notify failure. */
@@ -33,10 +35,13 @@ async function notify(ctx: AppCtx, html: string): Promise<void> {
 }
 
 async function candidateCount(ctx: AppCtx): Promise<number> {
+  // Same gate the crawl stage uses: manual/seed additions, ≥$10M ever, or a
+  // recent-window $5M+ peak — tracked pump.fun graduates below the bar are NOT
+  // pending work.
   const rows = await ctx.db
     .select({ n: count() })
     .from(tokens)
-    .where(eq(tokens.status, 'candidate'));
+    .where(crawlableCandidatesWhere(ctx.cfg));
   return rows[0]?.n ?? 0;
 }
 
@@ -148,8 +153,10 @@ export async function maybeAutoScan(ctx: AppCtx, reason: PipelineReason): Promis
     return false;
   }
 
-  await runImportDir(buildAnalyzerCtx()).catch((err) =>
-    ctx.log(`auto-scan: import-dir failed — ${err}`),
+  const analyzerCtx = buildAnalyzerCtx();
+  await runImportDir(analyzerCtx).catch((err) => ctx.log(`auto-scan: import-dir failed — ${err}`));
+  await repairMislabeledTokens(analyzerCtx).catch((err) =>
+    ctx.log(`auto-scan: repair failed — ${err}`),
   );
   const pending = await candidateCount(ctx);
   const neverScored = await ctx.db

@@ -86,8 +86,25 @@ const EnvSchema = z.object({
   DEV_ALERTS: boolFromEnv(true),
   /** Daily 09:00 UTC summary message. */
   DIGEST_ENABLED: boolFromEnv(true),
+  /**
+   * Minimum size of the live watch list: when fewer wallets clear the score
+   * thresholds, the best-scoring unranked ones are promoted to `watch` so the
+   * live system always has subjects. 0 disables.
+   */
+  WATCH_FLOOR: z.coerce.number().int().nonnegative().default(12),
+  /** Track pump.fun graduations (bonding-curve completions) as future candidates. */
+  TRACK_GRADUATIONS: boolFromEnv(true),
   PUMPPORTAL_ENABLED: boolFromEnv(true),
   DISCOVER_MIN_MC_USD: z.coerce.number().positive().default(10_000_000),
+  /**
+   * Recency priority: a token whose market cap peaked within the last
+   * RECENT_WINDOW_DAYS qualifies for the pipeline at this lower bar (and is
+   * crawled FIRST), while older tokens still need DISCOVER_MIN_MC_USD. This is
+   * the "insiders of the last 1-2 weeks first" behavior.
+   */
+  RECENT_MIN_MC_USD: z.coerce.number().positive().default(5_000_000),
+  /** Length of the recency window in days. */
+  RECENT_WINDOW_DAYS: z.coerce.number().positive().default(14),
   SOL_PRICE_FALLBACK_USD: z
     .string()
     .optional()

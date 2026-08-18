@@ -76,6 +76,14 @@ describe('config', () => {
     expect(getConfig().MIGRATE_ON_BOOT).toBe(false);
   });
 
+  it('ships the recency-priority defaults ($5M inside a 14-day window)', () => {
+    const cfg = getConfig();
+    expect(cfg.RECENT_MIN_MC_USD).toBe(5_000_000);
+    expect(cfg.RECENT_WINDOW_DAYS).toBe(14);
+    expect(cfg.WATCH_FLOOR).toBe(12);
+    expect(cfg.TRACK_GRADUATIONS).toBe(true);
+  });
+
   it('derives scoring config with spec thresholds', () => {
     resetConfigCache();
     const s = scoringConfig(getConfig());

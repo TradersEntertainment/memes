@@ -62,6 +62,57 @@ export async function runScoreAll(ctx: AnalyzerCtx): Promise<void> {
       ctx.log(`score ${shortAddr(address)} failed: ${err}`);
     }
   }
+
+  await ensureWatchFloor(ctx);
+}
+
+/**
+ * Absolute thresholds can starve the live system: if nobody clears 50 points the
+ * watch list is empty and NOTHING gets alerted — which defeats the whole product.
+ * When active insider+watch falls below WATCH_FLOOR, promote the best-scoring
+ * unranked wallets to `watch`, restricted to wallets with a genuine early
+ * position on a trustworthy (bonding-curve-crawled) token so junk data can't
+ * ride in. Blacklist rules still exclude bots. Set WATCH_FLOOR=0 to disable.
+ */
+export async function ensureWatchFloor(ctx: AnalyzerCtx): Promise<number> {
+  const { db, cfg, log } = ctx;
+  if (cfg.WATCH_FLOOR <= 0) return 0;
+
+  const current = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(wallets)
+    .where(and(eq(wallets.isActive, true), inArray(wallets.tier, ['insider', 'watch'])));
+  const missing = cfg.WATCH_FLOOR - (current[0]?.n ?? 0);
+  if (missing <= 0) return 0;
+
+  const promoted = await db.execute(sql`
+    update wallets set tier = 'watch', updated_at = now()
+    where address in (
+      select w.address
+      from wallets w
+      where w.tier is null
+        and w.is_active = true
+        and w.insider_score is not null
+        and exists (
+          select 1 from positions p
+          join tokens t on t.mint = p.mint
+          where p.wallet = w.address
+            and p.seconds_after_launch is not null
+            and t.bonding_curve is not null
+            and t.status = 'analyzed'
+        )
+      order by w.insider_score desc
+      limit ${missing}
+    )
+    returning address
+  `);
+  const n = promoted.length;
+  if (n > 0) {
+    log(
+      `watch-floor: only ${current[0]?.n ?? 0} wallet(s) cleared the thresholds — promoted top ${n} unranked wallet(s) to watch so live tracking has subjects`,
+    );
+  }
+  return n;
 }
 
 export async function runScoreWallet(ctx: AnalyzerCtx, address: string): Promise<void> {

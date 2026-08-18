@@ -4,6 +4,7 @@ import {
   eq,
   getDb,
   gte,
+  inArray,
   isNotNull,
   liveEvents,
   positions,
@@ -133,6 +134,34 @@ export async function getTopTokensToday(): Promise<TopToken[]> {
     .orderBy(sql`count(distinct ${liveEvents.wallet}) desc`)
     .limit(10);
   return rows.map((r) => ({ ...r, mint: r.mint! }));
+}
+
+export interface BubbleWallet {
+  address: string;
+  label: string | null;
+  tier: 'insider' | 'watch' | 'probation';
+  insiderScore: number | null;
+  totalPnlUsd: number | null;
+}
+
+/** Watched universe for the overview bubble map — best scores first, capped. */
+export async function getBubbleWallets(): Promise<BubbleWallet[]> {
+  const db = getDb();
+  const rows = await db
+    .select({
+      address: wallets.address,
+      label: wallets.label,
+      tier: wallets.tier,
+      insiderScore: wallets.insiderScore,
+      totalPnlUsd: wallets.totalPnlUsd,
+    })
+    .from(wallets)
+    .where(
+      and(eq(wallets.isActive, true), inArray(wallets.tier, ['insider', 'watch', 'probation'])),
+    )
+    .orderBy(sql`${wallets.insiderScore} desc nulls last`)
+    .limit(60);
+  return rows.map((r) => ({ ...r, tier: r.tier as BubbleWallet['tier'] }));
 }
 
 export type SortKey = 'score' | 'winrate' | 'pnl' | 'entry' | 'trades' | 'activity';

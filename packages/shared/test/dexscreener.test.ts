@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { bestPair, getPairsForTokens, pairMcUsd, type DexPair } from '../src/dexscreener';
+import { bestPair, discoveryFloorUsd, getPairsForTokens, pairMcUsd, type DexPair } from '../src/dexscreener';
 import { FIX, loadFixture } from './fixtures';
 
 const fixtureBody = loadFixture<{ pairs: DexPair[] }>('dexscreener/token-pairs.json');
@@ -34,5 +34,14 @@ describe('dexscreener client', () => {
   it('swallows API failures and returns an empty map', async () => {
     const map = await getPairsForTokens([FIX.mint], fetchWith({ error: 'x' }, 500));
     expect(map.size).toBe(0);
+  });
+
+  it('discoveryFloorUsd lowers the bar only for pairs inside the recency window', () => {
+    const cfg = { DISCOVER_MIN_MC_USD: 10_000_000, RECENT_MIN_MC_USD: 5_000_000, RECENT_WINDOW_DAYS: 14 };
+    const day = 86_400_000;
+    expect(discoveryFloorUsd(cfg, Date.now() - 5 * day)).toBe(5_000_000); // fresh pair
+    expect(discoveryFloorUsd(cfg, Date.now() - 40 * day)).toBe(10_000_000); // stale mid-cap
+    expect(discoveryFloorUsd(cfg, undefined)).toBe(10_000_000); // unknown age
+    expect(discoveryFloorUsd(cfg, Number.NaN)).toBe(10_000_000);
   });
 });

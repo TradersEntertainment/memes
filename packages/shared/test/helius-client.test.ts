@@ -83,6 +83,47 @@ describe('HeliusClient', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(3);
   });
 
+  it('reports truncation when the page cap stops before the real beginning', async () => {
+    // Truncated = the launch is NOT inside the drained window — callers must
+    // treat the oldest txs as arbitrary mid-history, never as the launch.
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse(Array.from({ length: 100 }, (_, i) => fakeTx(`s${Math.random()}-${i}`))),
+    ) as unknown as typeof fetch;
+    const client = new HeliusClient({ apiKey: 'k', fetchImpl });
+
+    const drained = await client.fetchHistoryOldestFirstDetailed('addr', { maxPages: 2 });
+    expect(drained.truncated).toBe(true);
+    expect(drained.txs).toHaveLength(200);
+  });
+
+  it('does not report truncation when the cap lands on a short final page', async () => {
+    // 100 txs then 40: the 40-tx page IS the real beginning even though the
+    // page cap (2) was reached — skipping this token would be a false negative.
+    const fetchImpl = vi.fn(async (url: string | URL) => {
+      const before = new URL(String(url)).searchParams.get('before');
+      if (!before) return jsonResponse(Array.from({ length: 100 }, (_, i) => fakeTx(`p1-${i}`)));
+      return jsonResponse(Array.from({ length: 40 }, (_, i) => fakeTx(`p2-${i}`)));
+    }) as unknown as typeof fetch;
+    const client = new HeliusClient({ apiKey: 'k', fetchImpl });
+
+    const drained = await client.fetchHistoryOldestFirstDetailed('addr', { maxPages: 2 });
+    expect(drained.truncated).toBe(false);
+    expect(drained.txs).toHaveLength(140);
+    expect(drained.txs[0]!.signature).toBe('p2-39'); // oldest first
+  });
+
+  it('reports a clean (non-truncated) drain when history ends naturally', async () => {
+    const fetchImpl = vi.fn(async (url: string | URL) => {
+      const before = new URL(String(url)).searchParams.get('before');
+      return before ? jsonResponse([]) : jsonResponse([fakeTx('a1'), fakeTx('a0')]);
+    }) as unknown as typeof fetch;
+    const client = new HeliusClient({ apiKey: 'k', fetchImpl });
+
+    const drained = await client.fetchHistoryOldestFirstDetailed('addr', { maxPages: 5 });
+    expect(drained.truncated).toBe(false);
+    expect(drained.txs.map((t) => t.signature)).toEqual(['a0', 'a1']); // oldest first
+  });
+
   it('parses the resume signature out of a 404 body', () => {
     const body = JSON.stringify({
       error:

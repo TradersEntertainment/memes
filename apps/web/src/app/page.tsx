@@ -1,16 +1,18 @@
 import Link from 'next/link';
 import { AlertFeed } from '@/components/alert-feed';
+import { BubbleMap } from '@/components/bubble-map';
 import { Card, Empty, StatCard, td, th, tr } from '@/components/ui';
 import { shortAddr, sol } from '@/lib/format';
-import { getFeed, getOverviewStats, getTopTokensToday } from '@/lib/queries';
+import { getBubbleWallets, getFeed, getOverviewStats, getTopTokensToday } from '@/lib/queries';
 
 export const dynamic = 'force-dynamic';
 
 export default async function OverviewPage() {
-  const [stats, feed, topTokens] = await Promise.all([
+  const [stats, feed, topTokens, bubbleWallets] = await Promise.all([
     getOverviewStats(),
     getFeed({ limit: 50 }),
     getTopTokensToday(),
+    getBubbleWallets(),
   ]);
 
   return (
@@ -22,6 +24,19 @@ export default async function OverviewPage() {
         <StatCard label="Events 24h" value={stats.events24h} hint="buys, sells, rotations" />
         <StatCard label="Tokens analyzed" value={stats.analyzedTokens} hint="early-buyer crawls" />
       </div>
+
+      <Card
+        title={
+          <span className="flex items-center justify-between">
+            Wallet map — watched universe
+            <Link href="/insiders" className="normal-case tracking-normal text-accent hover:underline">
+              Full table →
+            </Link>
+          </span>
+        }
+      >
+        <BubbleMap wallets={bubbleWallets} />
+      </Card>
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card title="Live feed — last 24h" className="lg:col-span-2">

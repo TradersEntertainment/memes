@@ -161,6 +161,7 @@ MC even before the token is listed anywhere.
 | `/stats <addr>` | Score breakdown, win rate, PnL, recent positions |
 | `/tokens <mint>…` | Queue candidate tokens for the next analysis pass |
 | `/scan` | Run the full pipeline now (same job the nightly cron runs) |
+| `/health` | Component snapshot: DB/tier counts, Helius circuit, webhook, PumpPortal, queues |
 
 ### Rotation tracking
 
@@ -193,7 +194,9 @@ after `PROBATION_EXPIRY_DAYS` (default 14). Extend the exchange list in
 pnpm dev:web        # http://localhost:3000   (production: pnpm build && pnpm --filter @insiderscope/web start)
 ```
 
-- `/` — live 24h feed (5s incremental polling), active-wallet stats, most-bought tokens today
+- `/` — live 24h feed (5s incremental polling), active-wallet stats, most-bought tokens today,
+  and a wallet **bubble map** (area ∝ |realized PnL|, color = tier, every bubble links to the
+  wallet's profile; `/insiders` is its table twin)
 - `/insiders` — sortable table (score, win rate, PnL, avg entry MC, trades, activity) with tier filter
 - `/insiders/[address]` — score-component breakdown, entry-MC + timing histograms, positions
   table (entry MC, launch delta, supply %, exit MC, PnL, holding, creator-linked), funding &
@@ -215,9 +218,27 @@ Route handlers read Postgres directly through Drizzle — no separate API layer.
   within `CONFLUENCE_WINDOW_MIN` (60) minutes, a combined alert lists them by score — the
   strongest signal the system produces, deduped once per mint per window.
 - **ATH flywheel (hourly)** — DexScreener-only refresh of every known token AND every mint bought
-  by watched wallets in the last 7 days; a token crossing $10M becomes a candidate and triggers
-  the pipeline, whose early buyers become new insider candidates. Insiders lead to tokens, tokens
-  lead to more insiders — unattended.
+  by watched wallets in the last 7 days; a token crossing the discovery bar becomes a candidate
+  and triggers the pipeline, whose early buyers become new insider candidates. Insiders lead to
+  tokens, tokens lead to more insiders — unattended.
+- **Recency priority** — the first focus is insiders of the **last 1-2 weeks**: a token that
+  peaked ≥ `RECENT_MIN_MC_USD` ($5M) within `RECENT_WINDOW_DAYS` (14) qualifies for the pipeline
+  and is crawled FIRST (newest peak first); older tokens still need `DISCOVER_MIN_MC_USD` ($10M)
+  and are worked as the backlog, so when no fresh runner exists the old universe keeps growing.
+- **Graduation funnel** — every pump.fun bonding-curve completion is recorded as a token row
+  (`TRACK_GRADUATIONS`), the hourly refresh follows its MC, and the moment it clears the bar its
+  bounded curve history is crawled — fresh runners feed the insider pool hours after launch.
+  Dead graduates (< $1M after 14 days, no positions) are pruned automatically.
+- **Honest crawls** — a token whose launch lies beyond `HELIUS_MAX_PAGES_TOKEN` pages (deep
+  Raydium-native histories) is marked `skipped` instead of fabricating "early buyers" from a
+  mid-history window; previously mislabeled tokens are repaired and re-crawled automatically.
+- **Watch floor** — when fewer than `WATCH_FLOOR` (12) wallets clear the score thresholds, the
+  best-scoring unranked wallets (with a genuine early position on a curve-crawled token) are
+  promoted to `watch`, so the live system always has subjects to alert on.
+- **Self-driving ops** — boot health report to Telegram, auto-scan when there's pending work, a
+  15-min watchdog that alerts once on each problem (and once on recovery) and re-registers the
+  Helius webhook if it drifts, credit/circuit awareness (a dead Helius key pauses crawling and
+  reports instead of burning retries), and pipeline start/finish/abort notices.
 - **📊 Daily digest** — 09:00 UTC summary (24h events, top buys, tier counts);
   `DIGEST_ENABLED=false` to disable.
 - **Unattended pipeline** — 03:00 UTC nightly (and on demand via the bot's `/scan`), the ingest
@@ -249,8 +270,13 @@ Tunables (defaults in parentheses): `EARLY_WINDOW_MIN` (30), `EARLY_MAX_BUYERS` 
 `TRANSFER_MIN_SOL` (5), `SELL_ALERTS` (true), `PROBATION_EXPIRY_DAYS` (14),
 `MAX_CHILDREN_PER_PARENT` (3), `MIN_SCORED_POSITIONS` (3), `ALERT_DEBOUNCE_SEC` (10),
 `ALERT_MAX_AGE_MIN` (15), `RECONCILE_INTERVAL_MIN` (5), `HELIUS_CONCURRENCY` (5),
-`HELIUS_MAX_PAGES_TOKEN` (300), `HELIUS_MAX_PAGES_WALLET` (20), `FUNDING_MAX_FUNDERS` (10),
-`PUMPPORTAL_ENABLED` (true), `DISCOVER_MIN_MC_USD` (10000000), `SOL_PRICE_FALLBACK_USD` (unset).
+`HELIUS_RPS` (10), `HELIUS_MAX_PAGES_TOKEN` (300), `HELIUS_MAX_PAGES_WALLET` (20),
+`FUNDING_MAX_PAGES` (8), `FUNDING_MAX_FUNDERS` (10), `FUNDING_LOOKBACK_DAYS` (30),
+`TOKENS_DIR` (/data/tokens), `SCORE_MAX_TRADES` (500), `SCORE_SELECTIVITY_TRADES` (200),
+`SCORE_REFRESH_DAYS` (3), `CONFLUENCE_MIN_WALLETS` (2), `CONFLUENCE_WINDOW_MIN` (60),
+`DEV_ALERTS` (true), `DIGEST_ENABLED` (true), `WATCH_FLOOR` (12), `TRACK_GRADUATIONS` (true),
+`PUMPPORTAL_ENABLED` (true), `DISCOVER_MIN_MC_USD` (10000000), `RECENT_MIN_MC_USD` (5000000),
+`RECENT_WINDOW_DAYS` (14), `MIGRATE_ON_BOOT` (true), `SOL_PRICE_FALLBACK_USD` (unset).
 
 ## Deploy to Railway
 

@@ -1,4 +1,4 @@
-import { eq, positions, sql, tokens, wallets, type Db } from '@insiderscope/db';
+import { and, eq, gte, isNull, or, positions, sql, tokens, wallets, type Db } from '@insiderscope/db';
 import {
   deriveBondingCurvePda,
   ensureSolPriceRange,
@@ -15,12 +15,83 @@ import type { AnalyzerCtx } from '../context';
 import { extractEarlyBuyers, type EarlyBuy } from '../lib/early-buyers';
 import { ensureWallets, upsertToken } from '../lib/persist';
 
+/**
+ * Repair pass for tokens analyzed via a deep AMM-pool crawl before the
+ * truncation guard existed: their "launch" was a mid-history transaction and
+ * their "early buyers" random recent traders. Clear the fabricated early fields
+ * and re-candidate the token — the guarded crawl then either analyzes it
+ * honestly or marks it skipped.
+ */
+export async function repairMislabeledTokens(ctx: AnalyzerCtx): Promise<number> {
+  const bad = await ctx.db
+    .select({ mint: tokens.mint })
+    .from(tokens)
+    .where(and(eq(tokens.status, 'analyzed'), isNull(tokens.bondingCurve)));
+  for (const { mint } of bad) {
+    await ctx.db
+      .update(positions)
+      .set({
+        secondsAfterLaunch: null,
+        entryMcUsd: null,
+        pctOfSupply: null,
+        firstBuySlot: null,
+      })
+      .where(eq(positions.mint, mint));
+    await ctx.db
+      .update(tokens)
+      .set({ status: 'candidate', launchTs: null, launchSlot: null, creatorWallet: null })
+      .where(eq(tokens.mint, mint));
+  }
+  if (bad.length > 0) {
+    ctx.log(`repair: ${bad.length} pool-crawled token(s) re-candidated, early fields cleared`);
+  }
+  return bad.length;
+}
+
+/** Start of the recency window: "peaked within the last 1-2 weeks". */
+function recentCutoff(cfg: AnalyzerCtx['cfg']): Date {
+  return new Date(Date.now() - cfg.RECENT_WINDOW_DAYS * 86_400_000);
+}
+
+/**
+ * Candidates worth crawling: manual/seed additions (no ATH yet), ≥ $10M at any
+ * point, or — the recency arm — ≥ $5M with the peak inside the recent window
+ * (upsertToken only advances athTs on a NEW high, so a recent athTs means the
+ * token crossed that level recently, not that we merely re-checked it).
+ */
+export function crawlableCandidatesWhere(cfg: AnalyzerCtx['cfg']) {
+  return and(
+    eq(tokens.status, 'candidate'),
+    or(
+      isNull(tokens.athMcUsd),
+      gte(tokens.athMcUsd, cfg.DISCOVER_MIN_MC_USD),
+      and(
+        gte(tokens.athMcUsd, cfg.RECENT_MIN_MC_USD),
+        gte(tokens.athTs, recentCutoff(cfg)),
+      ),
+    ),
+  );
+}
+
+/** Recent-window runners first (newest peak first), then the backlog. */
+export function recentFirstOrder(cfg: AnalyzerCtx['cfg']) {
+  const cutoff = recentCutoff(cfg).toISOString();
+  return [
+    sql`case when ${tokens.athTs} >= ${cutoff}::timestamptz and ${tokens.athMcUsd} >= ${cfg.RECENT_MIN_MC_USD} then 0 else 1 end`,
+    sql`${tokens.athTs} desc nulls last`,
+  ];
+}
+
 export async function runEarlyBuyersAll(ctx: AnalyzerCtx): Promise<void> {
+  await repairMislabeledTokens(ctx);
+  // Recent runners first — so if credits run out mid-pass, the "last 1-2 weeks"
+  // focus is what got done.
   const candidates = await ctx.db
     .select({ mint: tokens.mint })
     .from(tokens)
-    .where(eq(tokens.status, 'candidate'));
-  ctx.log(`early-buyers: ${candidates.length} candidate token(s)`);
+    .where(crawlableCandidatesWhere(ctx.cfg))
+    .orderBy(...recentFirstOrder(ctx.cfg));
+  ctx.log(`early-buyers: ${candidates.length} candidate token(s), recent peaks first`);
   for (const { mint } of candidates) {
     try {
       await runEarlyBuyers(ctx, mint);
@@ -42,11 +113,11 @@ export async function runEarlyBuyers(ctx: AnalyzerCtx, mint: string): Promise<vo
   // Never the mint itself — a $10M token's mint history is millions of txs.
   const curve = deriveBondingCurvePda(mint);
   let crawlAddress = curve;
-  let txs = await ctx.helius.fetchHistoryOldestFirst(curve, {
+  let drained = await ctx.helius.fetchHistoryOldestFirstDetailed(curve, {
     maxPages: cfg.HELIUS_MAX_PAGES_TOKEN,
   });
 
-  if (txs.length === 0) {
+  if (drained.txs.length === 0) {
     const existing = await db.select().from(tokens).where(eq(tokens.mint, mint)).limit(1);
     let pool = existing[0]?.poolAddress ?? null;
     if (!pool) {
@@ -56,14 +127,27 @@ export async function runEarlyBuyers(ctx: AnalyzerCtx, mint: string): Promise<vo
     if (pool) {
       log(`${mint}: empty bonding curve history, crawling pool ${pool}`);
       crawlAddress = pool;
-      txs = await ctx.helius.fetchHistoryOldestFirst(pool, {
+      drained = await ctx.helius.fetchHistoryOldestFirstDetailed(pool, {
         maxPages: cfg.HELIUS_MAX_PAGES_TOKEN,
       });
     }
   }
+  const txs = drained.txs;
 
   if (txs.length === 0) {
     log(`${mint}: no crawlable history (bonding curve empty, no pool found) — skipped`);
+    await db.update(tokens).set({ status: 'skipped' }).where(eq(tokens.mint, mint));
+    return;
+  }
+
+  if (drained.truncated) {
+    // The page cap stopped before the address's real beginning: the launch is
+    // NOT in this window, and "early buyers" from it would be random recent
+    // traders. Honest answer: this token's history is too deep for the cheap
+    // crawl (typical for Raydium-native giants) — skip instead of fabricating.
+    log(
+      `${mint}: history deeper than ${cfg.HELIUS_MAX_PAGES_TOKEN} pages — launch unreachable, skipped (raise HELIUS_MAX_PAGES_TOKEN only if you accept the credit cost)`,
+    );
     await db.update(tokens).set({ status: 'skipped' }).where(eq(tokens.mint, mint));
     return;
   }

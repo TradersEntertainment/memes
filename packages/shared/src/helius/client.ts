@@ -253,12 +253,19 @@ export class HeliusClient {
   /**
    * Paginate an address's parsed history newest → oldest via the `before` cursor.
    * Stops on an empty page or when `maxPages` is hit (cap enforced here so no
-   * caller can accidentally drain an unbounded history).
+   * caller can accidentally drain an unbounded history). The generator's return
+   * value says whether the CAP stopped it (true) — a short or empty final page
+   * means the source genuinely dried up, so hitting the cap on one is not a
+   * truncation.
    */
-  async *iterateHistory(address: string, o: IterateOptions = {}): AsyncGenerator<EnhancedTx[]> {
+  async *iterateHistory(
+    address: string,
+    o: IterateOptions = {},
+  ): AsyncGenerator<EnhancedTx[], boolean> {
     const maxPages = o.maxPages ?? Number.POSITIVE_INFINITY;
     let before: string | undefined;
     let pages = 0;
+    let lastPageFull = false;
     while (pages < maxPages) {
       const { txs, resumeBefore } = await this.fetchHistoryPage(address, {
         before,
@@ -267,6 +274,7 @@ export class HeliusClient {
         limit: 100,
       });
       pages += 1;
+      lastPageFull = txs.length >= 100;
       if (txs.length === 0) {
         // Empty page with a resume hint: the searched slot range held no matching
         // events (common with type filters on sparse wallets). Keep walking back.
@@ -274,22 +282,41 @@ export class HeliusClient {
           before = resumeBefore;
           continue;
         }
-        return;
+        return false;
       }
       yield txs;
       before = txs[txs.length - 1]!.signature;
     }
-    this.log?.(`iterateHistory(${address}): page cap ${maxPages} reached, history truncated`);
+    if (lastPageFull) {
+      this.log?.(`iterateHistory(${address}): page cap ${maxPages} reached, history truncated`);
+    }
+    return lastPageFull;
   }
 
   /** Drain (bounded) history and return it oldest → newest. */
   async fetchHistoryOldestFirst(address: string, o: IterateOptions = {}): Promise<EnhancedTx[]> {
+    return (await this.fetchHistoryOldestFirstDetailed(address, o)).txs;
+  }
+
+  /**
+   * Same, plus whether the page cap cut the crawl short. When it did, the
+   * "oldest" tx in the result is NOT the address's real beginning — callers
+   * doing launch detection must treat a truncated drain as unusable rather
+   * than fabricate a launch from a mid-history transaction.
+   */
+  async fetchHistoryOldestFirstDetailed(
+    address: string,
+    o: IterateOptions = {},
+  ): Promise<{ txs: EnhancedTx[]; truncated: boolean }> {
     const all: EnhancedTx[] = [];
-    for await (const page of this.iterateHistory(address, o)) {
-      all.push(...page);
+    const it = this.iterateHistory(address, o);
+    let step = await it.next();
+    while (!step.done) {
+      all.push(...step.value);
       this.log?.(`crawl ${address}: ${all.length} txs...`);
+      step = await it.next();
     }
-    return all.reverse();
+    return { txs: all.reverse(), truncated: step.value === true };
   }
 
   async rpc<T>(method: string, params: unknown[]): Promise<T> {

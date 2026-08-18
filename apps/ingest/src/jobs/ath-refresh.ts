@@ -1,13 +1,14 @@
-import { upsertToken } from '@insiderscope/analyzer';
+import { crawlableCandidatesWhere, upsertToken } from '@insiderscope/analyzer';
 import { and, eq, gte, isNotNull, isNull, liveEvents, sql, tokens } from '@insiderscope/db';
-import { bestPair, chunk, getPairsForTokens, pairMcUsd } from '@insiderscope/shared';
+import { bestPair, chunk, discoveryFloorUsd, getPairsForTokens, pairMcUsd } from '@insiderscope/shared';
 import type { AppCtx } from '../context';
 import { maybeAutoScan } from './nightly-rescore';
 
 /**
  * The flywheel (hourly): keep ATHs fresh for every token we know AND every mint
- * a watched wallet bought recently. When one of those crosses the $10M line it
- * becomes a candidate, the pipeline crawls ITS early buyers, and the insider
+ * a watched wallet bought recently. When one of those crosses the discovery bar
+ * ($10M ever — or $5M while inside the recency window, the "last 1-2 weeks" focus)
+ * it becomes a candidate, the pipeline crawls ITS early buyers, and the insider
  * universe grows on its own — insiders lead us to tokens, tokens lead us to more
  * insiders. DexScreener only (no Helius credits): ~a handful of batch calls.
  */
@@ -37,7 +38,9 @@ export async function refreshAth(ctx: AppCtx): Promise<void> {
       const pair = bestPair(pairs);
       const mcUsd = pairMcUsd(pair);
       if (!pair || mcUsd == null) continue;
-      if (!knownSet.has(mint) && mcUsd < cfg.DISCOVER_MIN_MC_USD) continue; // small live buy — not our universe yet
+      // Small live buy — not our universe yet. Fresh pairs qualify at the lower
+      // recency bar, older ones need the full threshold.
+      if (!knownSet.has(mint) && mcUsd < discoveryFloorUsd(cfg, pair.pairCreatedAt)) continue;
       await upsertToken(db, {
         mint,
         symbol: pair.baseToken.symbol ?? null,
@@ -52,19 +55,24 @@ export async function refreshAth(ctx: AppCtx): Promise<void> {
     }
   }
 
-  // Anything now above the threshold that was never crawled → run the pipeline.
+  // Prune dead graduates: tracked bonding-curve completions that never went
+  // anywhere keep the hourly refresh cheap by leaving after two weeks (only
+  // rows nothing references — a wallet position always preserves its token).
+  await db.execute(sql`
+    delete from tokens
+    where status = 'candidate'
+      and coalesce(ath_mc_usd, 0) < 1000000
+      and created_at < now() - interval '14 days'
+      and not exists (select 1 from positions p where p.mint = tokens.mint)
+  `);
+
+  // Anything now above the threshold (or newly discovered) → run the pipeline.
   const crossers = await db
     .select({ n: sql<number>`count(*)::int` })
     .from(tokens)
-    .where(
-      and(
-        eq(tokens.status, 'candidate'),
-        isNull(tokens.launchTs),
-        gte(tokens.athMcUsd, cfg.DISCOVER_MIN_MC_USD),
-      ),
-    );
+    .where(and(crawlableCandidatesWhere(cfg), isNotNull(tokens.athMcUsd)));
   const pending = crossers[0]?.n ?? 0;
-  log(`ath-refresh: ${refreshed} refreshed, ${discovered} new ≥$10M from live buys, ${pending} uncrawled`);
+  log(`ath-refresh: ${refreshed} refreshed, ${discovered} newly discovered from live buys, ${pending} crawlable`);
   if (pending > 0) {
     await maybeAutoScan(ctx, 'ath-cross');
   }

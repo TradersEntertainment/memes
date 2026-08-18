@@ -1,4 +1,4 @@
-import { and, count, eq, inArray, wallets } from '@insiderscope/db';
+import { count, eq, tokens, wallets } from '@insiderscope/db';
 import type { AppCtx } from './context';
 
 export interface HealthProblem {
@@ -22,14 +22,28 @@ export async function buildHealthReport(ctx: AppCtx): Promise<HealthReport> {
 
   let watched = 0;
   try {
-    const rows = await ctx.db
-      .select({ n: count() })
+    // Full breakdowns so "0 cüzdan izleniyor" is diagnosable at a glance:
+    // an empty DB, an all-blacklisted pool, and a not-yet-scored pool all
+    // look different here.
+    const tierRows = await ctx.db
+      .select({ tier: wallets.tier, n: count() })
       .from(wallets)
-      .where(
-        and(eq(wallets.isActive, true), inArray(wallets.tier, ['insider', 'watch', 'probation'])),
-      );
-    watched = rows[0]?.n ?? 0;
+      .where(eq(wallets.isActive, true))
+      .groupBy(wallets.tier);
+    const w = Object.fromEntries(tierRows.map((r) => [r.tier ?? 'unranked', r.n]));
+    watched = (w.insider ?? 0) + (w.watch ?? 0) + (w.probation ?? 0);
+    const statusRows = await ctx.db
+      .select({ status: tokens.status, n: count() })
+      .from(tokens)
+      .groupBy(tokens.status);
+    const t = Object.fromEntries(statusRows.map((r) => [r.status, r.n]));
     lines.push(`🗄️ Veritabanı bağlı — ${watched} cüzdan izleniyor`);
+    lines.push(
+      `📦 Tokenlar: ${t.analyzed ?? 0} analiz · ${t.candidate ?? 0} sırada · ${t.skipped ?? 0} atlandı`,
+    );
+    lines.push(
+      `👥 Cüzdanlar: ⭐ ${w.insider ?? 0} insider · 👀 ${w.watch ?? 0} watch · 🕒 ${w.probation ?? 0} probation · 🚫 ${w.blacklist ?? 0} blacklist · ❔ ${w.unranked ?? 0} puansız`,
+    );
   } catch {
     lines.push('🗄️ Veritabanına ERİŞİLEMİYOR');
     problems.push({ key: 'db', text: 'Veritabanına erişilemiyor' });

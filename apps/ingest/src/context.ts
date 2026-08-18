@@ -1,9 +1,12 @@
-import { getDb, type Db } from '@insiderscope/db';
+import { getDb, tokens, type Db } from '@insiderscope/db';
 import {
+  deriveBondingCurvePda,
   escapeHtml,
   fmtUsdCompact,
   getConfig,
+  getSolPriceUsdNow,
   HeliusClient,
+  pumpfunMcSol,
   shortAddr,
   type AppConfig,
 } from '@insiderscope/shared';
@@ -61,6 +64,39 @@ export function buildAppCtx(): AppCtx {
 
   const enqueueCustomAlert = async (text: string) => {
     await alertsQueue.add('custom', { custom: { text } });
+  };
+
+  // Graduation tracking — the "fresh runner" funnel: a bonding-curve completion
+  // becomes a tokens row at its graduation MC (~$70K). The hourly ATH refresh
+  // then follows its market cap; once it crosses the discovery bar ($5M inside
+  // the recency window, $10M otherwise) it turns into a real candidate, its
+  // (bounded) curve history is crawled, and its early buyers enter the insider
+  // pool — all unattended, hours after the run starts.
+  pumpPortalCtx.onMigration = (mint) => {
+    if (!cfg.TRACK_GRADUATIONS) return;
+    void (async () => {
+      const cached = await pumpCache.get(mint);
+      const solUsd = await getSolPriceUsdNow({ fallbackUsd: cfg.SOL_PRICE_FALLBACK_USD });
+      const gradMc =
+        cached && cached.vTokens > 0 && solUsd != null
+          ? pumpfunMcSol(cached.vSol, cached.vTokens) * solUsd
+          : 70_000; // typical graduation cap — placeholder until the hourly refresh
+      await db
+        .insert(tokens)
+        .values({
+          mint,
+          symbol: cached?.symbol ?? null,
+          name: cached?.name ?? null,
+          creatorWallet: cached?.creator ?? null,
+          launchPlatform: 'pumpfun',
+          launchTs: cached?.launchTs ?? null,
+          bondingCurve: deriveBondingCurvePda(mint),
+          athMcUsd: gradMc,
+          athTs: new Date(),
+          status: 'candidate',
+        })
+        .onConflictDoNothing();
+    })().catch((err) => log(`graduation track failed for ${mint}: ${err}`));
   };
 
   // Dev-launch watch: every pump.fun launch's creator is checked against known

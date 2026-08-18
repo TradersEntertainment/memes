@@ -1,3 +1,4 @@
+import type { AppConfig } from './config';
 import { DEXSCREENER_API_BASE } from './constants';
 import { chunk } from './utils';
 
@@ -64,6 +65,25 @@ export function pairMcUsd(pair: DexPair | null): number | null {
   if (!pair) return null;
   const mc = pair.marketCap ?? pair.fdv;
   return mc != null && Number.isFinite(mc) && mc > 0 ? mc : null;
+}
+
+/**
+ * Market-cap bar a token must clear to enter the pipeline, by pair age: a pair
+ * opened within RECENT_WINDOW_DAYS qualifies at RECENT_MIN_MC_USD (the "last
+ * 1-2 weeks first" focus), anything older — or of unknown age — still needs
+ * DISCOVER_MIN_MC_USD, so stale mid-caps can't ride in on the lower bar.
+ */
+export function discoveryFloorUsd(
+  cfg: Pick<AppConfig, 'DISCOVER_MIN_MC_USD' | 'RECENT_MIN_MC_USD' | 'RECENT_WINDOW_DAYS'>,
+  pairCreatedAt?: number,
+): number {
+  const isRecent =
+    pairCreatedAt != null &&
+    Number.isFinite(pairCreatedAt) &&
+    Date.now() - pairCreatedAt <= cfg.RECENT_WINDOW_DAYS * 86_400_000;
+  return isRecent
+    ? Math.min(cfg.RECENT_MIN_MC_USD, cfg.DISCOVER_MIN_MC_USD)
+    : cfg.DISCOVER_MIN_MC_USD;
 }
 
 /** Current market cap for a mint, or null when DexScreener doesn't know it yet. */

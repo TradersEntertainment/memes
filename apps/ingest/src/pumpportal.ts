@@ -3,7 +3,7 @@ import { PUMPPORTAL_WS_URL } from '@insiderscope/shared';
 import type { CurveState, PumpCurveCache } from './pump-cache';
 
 interface PumpPortalMessage {
-  txType?: 'create' | 'buy' | 'sell';
+  txType?: 'create' | 'buy' | 'sell' | 'migrate';
   mint?: string;
   traderPublicKey?: string;
   name?: string;
@@ -28,6 +28,8 @@ export interface PumpPortalCtx {
   log: (msg: string) => void;
   /** Fired for every new pump.fun launch (context wires the creator-watch here). */
   onNewToken?: (info: NewTokenInfo) => void;
+  /** Fired when a token completes its bonding curve (graduates to an AMM). */
+  onMigration?: (mint: string) => void;
 }
 
 const MAX_TRACKED = 50;
@@ -103,8 +105,9 @@ export class PumpPortalConsumer {
     ws.on('open', () => {
       this.connected = true;
       this.backoffMs = 1_000;
-      this.ctx.log('pumpportal: connected, subscribing to new launches');
+      this.ctx.log('pumpportal: connected, subscribing to new launches + migrations');
       this.send({ method: 'subscribeNewToken' });
+      this.send({ method: 'subscribeMigration' });
       if (this.tracked.size > 0) {
         this.send({ method: 'subscribeTokenTrade', keys: [...this.tracked] });
       }
@@ -148,6 +151,11 @@ export class PumpPortalConsumer {
       return;
     }
     if (!msg.mint || !msg.txType) return;
+
+    if (msg.txType === 'migrate') {
+      this.ctx.onMigration?.(msg.mint);
+      return;
+    }
 
     if (msg.txType === 'create') {
       const state: CurveState = {
