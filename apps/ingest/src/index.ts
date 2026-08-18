@@ -1,12 +1,14 @@
 import { closeDb } from '@insiderscope/db';
 import { startAlertWorker } from './alerts/queue';
 import { buildAppCtx } from './context';
+import { scheduleRepeatables, startSystemWorker } from './jobs/scheduler';
 import { buildServer } from './server';
 import { syncHeliusWebhook } from './webhook-sync';
 
 async function main(): Promise<void> {
   const ctx = buildAppCtx();
-  const workers = [startAlertWorker(ctx, ctx.cfg.REDIS_URL)];
+  const workers = [startAlertWorker(ctx, ctx.cfg.REDIS_URL), startSystemWorker(ctx)];
+  await scheduleRepeatables(ctx);
 
   const app = buildServer(ctx);
   await app.listen({ port: ctx.cfg.INGEST_PORT, host: '0.0.0.0' });
@@ -21,11 +23,14 @@ async function main(): Promise<void> {
 
   await syncHeliusWebhook(ctx).catch((err) => ctx.log(`initial webhook sync failed: ${err}`));
 
+  ctx.pumpPortal?.start();
+
   let shuttingDown = false;
   const shutdown = async (signal: string) => {
     if (shuttingDown) return;
     shuttingDown = true;
     ctx.log(`${signal} — shutting down`);
+    ctx.pumpPortal?.stop();
     await app.close().catch(() => {});
     await ctx.bot?.stop().catch(() => {});
     await Promise.allSettled(workers.map((w) => w.close()));

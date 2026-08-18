@@ -26,6 +26,8 @@ export interface PipelineDeps {
     swap: NormalizedSwap,
   ) => Promise<{ mcUsd: number | null; source: string }>;
   onTransferOut: (input: RotationInput) => Promise<void>;
+  /** Subscribe this mint to the PumpPortal trade stream (fresh MC for alerts). */
+  trackMint?: (mint: string) => void;
   log: (msg: string) => void;
 }
 
@@ -85,6 +87,7 @@ async function handleEvent(
     .where(eq(wallets.address, ev.wallet.address));
 
   if ('swap' in ev) {
+    if (ev.kind === 'buy') deps.trackMint?.(ev.swap.mint);
     const mc = await deps.resolveMc(ev.swap.mint, ev.swap);
     if (mc.mcUsd != null) {
       await deps.db

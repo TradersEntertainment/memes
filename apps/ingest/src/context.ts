@@ -9,6 +9,7 @@ import { makeResolveMc } from './pipeline/enrich';
 import { handleTransferOut, type RotationDeps } from './pipeline/rotation';
 import type { PipelineDeps } from './pipeline/process';
 import { PumpCurveCache } from './pump-cache';
+import { PumpPortalConsumer } from './pumpportal';
 import { createSystemQueue } from './system-queue';
 import { getWatchedWallets } from './watched';
 
@@ -20,6 +21,7 @@ export interface AppCtx {
   helius: HeliusClient | null;
   bot: Bot | null;
   pumpCache: PumpCurveCache;
+  pumpPortal: PumpPortalConsumer | null;
   alertsQueue: Queue;
   systemQueue: Queue;
   pipeline: PipelineDeps;
@@ -37,6 +39,7 @@ export function buildAppCtx(): AppCtx {
   if (!helius) log('HELIUS_API_KEY not set — webhook registration and reconciliation disabled');
 
   const pumpCache = new PumpCurveCache(redis);
+  const pumpPortal = cfg.PUMPPORTAL_ENABLED ? new PumpPortalConsumer({ pumpCache, log }) : null;
   const alertsQueue = createAlertsQueue(cfg.REDIS_URL);
   const systemQueue = createSystemQueue(cfg.REDIS_URL);
 
@@ -61,6 +64,7 @@ export function buildAppCtx(): AppCtx {
     },
     resolveMc: makeResolveMc({ db, cfg, helius, pumpCache, log }),
     onTransferOut: (input) => handleTransferOut(rotationDeps, input),
+    trackMint: (mint) => pumpPortal?.trackMint(mint),
   };
 
   const ctx: AppCtx = {
@@ -71,6 +75,7 @@ export function buildAppCtx(): AppCtx {
     helius,
     bot: null,
     pumpCache,
+    pumpPortal,
     alertsQueue,
     systemQueue,
     pipeline,
