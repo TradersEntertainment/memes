@@ -1,0 +1,35 @@
+{
+  "name": "insiderscope",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "analyzer": "pnpm --filter @insiderscope/analyzer start",
+    "dev:ingest": "pnpm --filter @insiderscope/ingest dev",
+    "dev:web": "pnpm --filter @insiderscope/web dev",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "db:generate": "pnpm --filter @insiderscope/db generate",
+    "db:migrate": "pnpm --filter @insiderscope/db migrate",
+    "test": "vitest run --passWithNoTests",
+    "test:watch": "vitest",
+    "typecheck": "pnpm -r --if-present run typecheck",
+    "build": "pnpm --filter @insiderscope/web build"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.8.0",
+    "vitest": "^3.2.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "@tailwindcss/oxide",
+      "sharp"
+    ]
+  }
+}
