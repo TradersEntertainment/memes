@@ -2,6 +2,7 @@ import { eq, liveEvents, sql, wallets, type Db } from '@insiderscope/db';
 import type { AppConfig, EnhancedTx, NormalizedSwap } from '@insiderscope/shared';
 import type { WatchedWallet } from '../watched';
 import { classifyTx, type ClassifiedEvent } from './classify';
+import { buildConfluenceAlert } from './confluence';
 
 export interface RotationInput {
   parent: WatchedWallet;
@@ -28,6 +29,8 @@ export interface PipelineDeps {
   onTransferOut: (input: RotationInput) => Promise<void>;
   /** Subscribe this mint to the PumpPortal trade stream (fresh MC for alerts). */
   trackMint?: (mint: string) => void;
+  /** Send a pre-formatted composite alert (confluence etc.) through the queue. */
+  enqueueCustomAlert?: (text: string) => Promise<void>;
   log: (msg: string) => void;
 }
 
@@ -111,6 +114,23 @@ async function handleEvent(
     deps.log(
       `${origin} ${ev.kind}: ${ev.wallet.address.slice(0, 6)}… ${ev.swap.solAmount} SOL ${ev.swap.mint.slice(0, 6)}… mc=${mc.mcUsd ?? '?'} (${mc.source})${alertable ? '' : ' [no-alert]'}`,
     );
+
+    // Confluence: several watched wallets in the same mint within the window.
+    // Independent of the per-wallet debounce; deduped once per mint per window.
+    if (ev.kind === 'buy' && deps.enqueueCustomAlert && ageMin <= deps.cfg.ALERT_MAX_AGE_MIN) {
+      const confluence = await buildConfluenceAlert(deps.db, deps.cfg, ev.swap.mint).catch(
+        () => null,
+      );
+      if (
+        confluence &&
+        (await deps.debounce(
+          `is:confluence:${ev.swap.mint}`,
+          deps.cfg.CONFLUENCE_WINDOW_MIN * 60,
+        ))
+      ) {
+        await deps.enqueueCustomAlert(confluence.text);
+      }
+    }
   } else if (ev.kind === 'transfer_out') {
     await deps.onTransferOut({
       parent: ev.wallet,

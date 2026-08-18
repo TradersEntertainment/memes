@@ -208,6 +208,18 @@ Route handlers read Postgres directly through Drizzle — no separate API layer.
   (metadata + virtual reserves), so alerts show MC and "Launch +Xdk" before DexScreener lists the
   token. Mints that watched wallets buy get live trade subscriptions (LRU-capped). Disable with
   `PUMPPORTAL_ENABLED=false`.
+- **🧨 Dev-launch alerts** — every pump.fun launch's creator is checked (5-min cache) against
+  creators of past $10M tokens and all watched wallets; a hit alerts within seconds
+  (`DEV_ALERTS=false` to disable).
+- **🔥 Confluence alerts** — when `CONFLUENCE_MIN_WALLETS` (2) watched wallets buy the same mint
+  within `CONFLUENCE_WINDOW_MIN` (60) minutes, a combined alert lists them by score — the
+  strongest signal the system produces, deduped once per mint per window.
+- **ATH flywheel (hourly)** — DexScreener-only refresh of every known token AND every mint bought
+  by watched wallets in the last 7 days; a token crossing $10M becomes a candidate and triggers
+  the pipeline, whose early buyers become new insider candidates. Insiders lead to tokens, tokens
+  lead to more insiders — unattended.
+- **📊 Daily digest** — 09:00 UTC summary (24h events, top buys, tier counts);
+  `DIGEST_ENABLED=false` to disable.
 - **Unattended pipeline** — 03:00 UTC nightly (and on demand via the bot's `/scan`), the ingest
   service runs the whole historical pipeline in-process: import CSVs from `TOKENS_DIR` →
   `discover` → `early-buyers --all` → `funding --all` → `score`, then refreshes the Helius

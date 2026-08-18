@@ -1,5 +1,12 @@
 import { getDb, type Db } from '@insiderscope/db';
-import { getConfig, HeliusClient, type AppConfig } from '@insiderscope/shared';
+import {
+  escapeHtml,
+  fmtUsdCompact,
+  getConfig,
+  HeliusClient,
+  shortAddr,
+  type AppConfig,
+} from '@insiderscope/shared';
 import type { Queue } from 'bullmq';
 import IORedis from 'ioredis';
 import type { Bot } from 'grammy';
@@ -8,8 +15,9 @@ import { createBot } from './bot/bot';
 import { makeResolveMc } from './pipeline/enrich';
 import { handleTransferOut, type RotationDeps } from './pipeline/rotation';
 import type { PipelineDeps } from './pipeline/process';
+import { lookupKnownCreator } from './creator-watch';
 import { PumpCurveCache } from './pump-cache';
-import { PumpPortalConsumer } from './pumpportal';
+import { PumpPortalConsumer, type PumpPortalCtx } from './pumpportal';
 import { createPipelineQueue, createSystemQueue } from './system-queue';
 import { getWatchedWallets } from './watched';
 
@@ -45,10 +53,42 @@ export function buildAppCtx(): AppCtx {
   if (!helius) log('HELIUS_API_KEY not set — webhook registration and reconciliation disabled');
 
   const pumpCache = new PumpCurveCache(redis);
-  const pumpPortal = cfg.PUMPPORTAL_ENABLED ? new PumpPortalConsumer({ pumpCache, log }) : null;
+  const pumpPortalCtx: PumpPortalCtx = { pumpCache, log };
+  const pumpPortal = cfg.PUMPPORTAL_ENABLED ? new PumpPortalConsumer(pumpPortalCtx) : null;
   const alertsQueue = createAlertsQueue(cfg.REDIS_URL);
   const systemQueue = createSystemQueue(cfg.REDIS_URL);
   const pipelineQueue = createPipelineQueue(cfg.REDIS_URL);
+
+  const enqueueCustomAlert = async (text: string) => {
+    await alertsQueue.add('custom', { custom: { text } });
+  };
+
+  // Dev-launch watch: every pump.fun launch's creator is checked against known
+  // $10M-token creators and watched wallets — a hit alerts within seconds.
+  pumpPortalCtx.onNewToken = (info) => {
+    if (!cfg.DEV_ALERTS) return;
+    void (async () => {
+      const hit = await lookupKnownCreator(db, cfg.DISCOVER_MIN_MC_USD, info.creator);
+      if (!hit) return;
+      const dedupeKey = `is:devlaunch:${info.creator}`;
+      if ((await redis.set(dedupeKey, '1', 'EX', 3600, 'NX')) !== 'OK') return;
+      pumpPortal?.trackMint(info.mint);
+      const who =
+        hit.kind === 'creator'
+          ? `geçmişi: ${hit.pastSymbol ? `$${escapeHtml(hit.pastSymbol)}` : 'bilinen token'}${
+              hit.pastAthUsd ? ` (${fmtUsdCompact(hit.pastAthUsd)} ATH)` : ''
+            } creator'ı`
+          : `izlenen cüzdan (${hit.tier}${hit.score != null ? `, skor ${Math.round(hit.score)}` : ''})`;
+      const text = [
+        `🧨 <b>BİLİNEN CÜZDAN YENİ TOKEN ÇIKARDI</b>`,
+        `Creator: ${hit.label ? escapeHtml(hit.label) : shortAddr(info.creator!)} — ${who}`,
+        `Token: ${info.symbol ? `$${escapeHtml(info.symbol)}` : shortAddr(info.mint)} (${shortAddr(info.mint)})`,
+        `Linkler: <a href="https://pump.fun/${info.mint}">pump.fun</a> | <a href="https://gmgn.ai/sol/token/${info.mint}">GMGN</a>`,
+      ].join('\n');
+      await enqueueCustomAlert(text);
+      log(`dev-launch alert: ${info.creator} → ${info.mint}`);
+    })().catch((err) => log(`dev-launch check failed: ${err}`));
+  };
 
   const rotationDeps: RotationDeps = {
     db,
@@ -72,6 +112,7 @@ export function buildAppCtx(): AppCtx {
     resolveMc: makeResolveMc({ db, cfg, helius, pumpCache, log }),
     onTransferOut: (input) => handleTransferOut(rotationDeps, input),
     trackMint: (mint) => pumpPortal?.trackMint(mint),
+    enqueueCustomAlert,
   };
 
   const ctx: AppCtx = {

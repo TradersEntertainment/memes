@@ -16,9 +16,18 @@ interface PumpPortalMessage {
   pool?: string;
 }
 
+export interface NewTokenInfo {
+  mint: string;
+  creator?: string;
+  symbol?: string;
+  name?: string;
+}
+
 export interface PumpPortalCtx {
   pumpCache: PumpCurveCache;
   log: (msg: string) => void;
+  /** Fired for every new pump.fun launch (context wires the creator-watch here). */
+  onNewToken?: (info: NewTokenInfo) => void;
 }
 
 const MAX_TRACKED = 50;
@@ -134,6 +143,12 @@ export class PumpPortalConsumer {
         name: msg.name,
       };
       await this.ctx.pumpCache.set(msg.mint, state);
+      this.ctx.onNewToken?.({
+        mint: msg.mint,
+        creator: msg.traderPublicKey,
+        symbol: msg.symbol,
+        name: msg.name,
+      });
       return;
     }
 

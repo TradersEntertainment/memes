@@ -2,7 +2,7 @@ import { Queue, Worker } from 'bullmq';
 import IORedis from 'ioredis';
 import type { AlertWalletInfo } from './format';
 import type { SendCtx } from './send';
-import { sendRotationAlert, sendSwapAlert } from './send';
+import { sendCustomAlert, sendRotationAlert, sendSwapAlert } from './send';
 
 export const ALERTS_QUEUE = 'insiderscope-alerts';
 
@@ -26,7 +26,8 @@ export function createAlertsQueue(redisUrl: string): Queue {
 
 export type AlertJobData =
   | { eventId: number }
-  | { rotation: { parent: AlertWalletInfo; child: string; amountSol: number; eventId?: number | null } };
+  | { rotation: { parent: AlertWalletInfo; child: string; amountSol: number; eventId?: number | null } }
+  | { custom: { text: string } };
 
 /**
  * One worker, one message at a time, ~19 msg/min — inside Telegram's 20/min
@@ -38,8 +39,10 @@ export function startAlertWorker(ctx: SendCtx, redisUrl: string): Worker<AlertJo
     async (job) => {
       if ('eventId' in job.data) {
         await sendSwapAlert(ctx, job.data.eventId);
-      } else {
+      } else if ('rotation' in job.data) {
         await sendRotationAlert(ctx, job.data.rotation);
+      } else {
+        await sendCustomAlert(ctx, job.data.custom.text);
       }
     },
     {

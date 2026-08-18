@@ -90,3 +90,8 @@ export async function sendRotationAlert(
 ): Promise<void> {
   await deliver(ctx, formatRotationAlert(input), input.eventId ?? null);
 }
+
+/** Pre-formatted composite alerts (confluence, dev-launch, digest). */
+export async function sendCustomAlert(ctx: SendCtx, text: string): Promise<void> {
+  await deliver(ctx, text, null);
+}

@@ -78,6 +78,14 @@ const EnvSchema = z.object({
   SCORE_SELECTIVITY_TRADES: z.coerce.number().int().positive().default(200),
   /** Rescore a wallet at most this often unless it traded in the meantime. */
   SCORE_REFRESH_DAYS: z.coerce.number().positive().default(3),
+  /** Confluence alert: this many watched wallets buying the same mint... */
+  CONFLUENCE_MIN_WALLETS: z.coerce.number().int().positive().default(2),
+  /** ...within this window (minutes) triggers a combined alert. */
+  CONFLUENCE_WINDOW_MIN: z.coerce.number().positive().default(60),
+  /** Alert when a creator of a past $10M token launches something new on pump.fun. */
+  DEV_ALERTS: boolFromEnv(true),
+  /** Daily 09:00 UTC summary message. */
+  DIGEST_ENABLED: boolFromEnv(true),
   PUMPPORTAL_ENABLED: boolFromEnv(true),
   DISCOVER_MIN_MC_USD: z.coerce.number().positive().default(10_000_000),
   SOL_PRICE_FALLBACK_USD: z

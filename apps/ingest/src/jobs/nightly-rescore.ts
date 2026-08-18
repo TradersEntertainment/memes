@@ -12,13 +12,14 @@ import type { AppCtx } from '../context';
 import { invalidateWatchedCache } from '../watched';
 import { syncHeliusWebhook } from './../webhook-sync';
 
-export type PipelineReason = 'boot' | 'nightly' | 'manual' | 'tokens-added';
+export type PipelineReason = 'boot' | 'nightly' | 'manual' | 'tokens-added' | 'ath-cross';
 
 const REASON_TR: Record<PipelineReason, string> = {
   boot: 'sunucu açılışı',
   nightly: 'gece planı (03:00 UTC)',
   manual: '/scan komutu',
   'tokens-added': 'yeni token eklendi',
+  'ath-cross': 'bir token $10M eşiğini geçti',
 };
 
 /** Telegram + log in one place; the pipeline must never die on a notify failure. */

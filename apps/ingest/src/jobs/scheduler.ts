@@ -3,6 +3,8 @@ import { makeBullConnection } from '../alerts/queue';
 import type { AppCtx } from '../context';
 import type { RotationCheckJobData } from '../pipeline/rotation';
 import { PIPELINE_QUEUE, SYSTEM_QUEUE } from '../system-queue';
+import { refreshAth } from './ath-refresh';
+import { sendDailyDigest } from './daily-digest';
 import { nightlyRescore, type PipelineReason } from './nightly-rescore';
 import { sweepProbation } from './probation-expiry';
 import { reconcile } from './reconcile';
@@ -21,6 +23,12 @@ export function startSystemWorker(ctx: AppCtx): Worker {
           break;
         case 'rotation-check':
           await runRotationCheck(ctx, job.data as RotationCheckJobData);
+          break;
+        case 'ath-refresh':
+          await refreshAth(ctx);
+          break;
+        case 'daily-digest':
+          await sendDailyDigest(ctx);
           break;
         default:
           ctx.log(`system worker: unknown job "${job.name}"`);
@@ -57,6 +65,16 @@ export async function scheduleRepeatables(ctx: AppCtx): Promise<void> {
     { every: 3_600_000 },
     { name: 'probation-expiry' },
   );
+  await ctx.systemQueue.upsertJobScheduler(
+    'ath-refresh',
+    { every: 3_600_000 },
+    { name: 'ath-refresh' },
+  );
+  await ctx.systemQueue.upsertJobScheduler(
+    'daily-digest',
+    { pattern: '0 9 * * *', tz: 'UTC' },
+    { name: 'daily-digest' },
+  );
   await ctx.pipelineQueue.upsertJobScheduler(
     'nightly-pipeline',
     { pattern: '0 3 * * *', tz: 'UTC' },
@@ -66,6 +84,6 @@ export async function scheduleRepeatables(ctx: AppCtx): Promise<void> {
   // pipeline on the latency-sensitive queue.
   await ctx.systemQueue.removeJobScheduler('nightly-rescore').catch(() => undefined);
   ctx.log(
-    'jobs scheduled: reconcile (5m), probation-expiry (1h), full pipeline (03:00 UTC, own queue)',
+    'jobs scheduled: reconcile (5m), probation-expiry (1h), ath-refresh (1h), daily-digest (09:00 UTC), full pipeline (03:00 UTC, own queue)',
   );
 }

@@ -5,3 +5,4 @@ export { runImportDir, runImportTokens } from './commands/import-tokens';
 export { runEarlyBuyers, runEarlyBuyersAll } from './commands/early-buyers';
 export { runFunding, runFundingAll } from './commands/funding';
 export { runScoreAll, runScoreWallet } from './commands/score';
+export { upsertToken } from './lib/persist';
