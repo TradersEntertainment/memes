@@ -11,3 +11,5 @@ export * from './launch-detect';
 export * from './dexscreener';
 export * from './sol-price';
 export * from './mc';
+export * from './funding';
+export * from './scorer';
