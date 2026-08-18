@@ -1,27 +1,253 @@
 # InsiderScope
 
-Solana memecoin insider tracker: finds the real insiders (not sniper bots) of tokens that reached
-$10M+ market cap from historical on-chain data, watches those wallets live via Helius webhooks,
-sends Telegram alerts within seconds when they buy, auto-follows wallet rotations, and shows each
-insider's profile on a dashboard.
+Solana memecoin insider tracker. It finds the **real insiders** (not sniper bots) of tokens that
+reached **$10M+ market cap** from historical on-chain data, watches those wallets **live** via
+Helius webhooks, fires a **Telegram alert within seconds** when they buy, **auto-follows wallet
+rotations** (SOL moved to a fresh wallet), and shows every insider's profile on a dark terminal
+**dashboard**.
 
-> Full setup docs, CLI examples and the ngrok webhook flow are documented below (work in progress
-> while the project is being built phase by phase).
+```
+                    ┌──────────────────────────────────────────────────────┐
+  DexScreener ──►   │  apps/analyzer (CLI)                                 │
+  Helius Enhanced ► │  import-tokens → early-buyers → funding → score      │──► Postgres
+  Binance klines ─► │  (historical pipeline, idempotent, page-capped)      │
+                    └──────────────────────────────────────────────────────┘
+                    ┌──────────────────────────────────────────────────────┐
+  Helius webhook ─► │  apps/ingest (Fastify + BullMQ + grammY)             │──► Telegram
+  PumpPortal WS ──► │  classify → persist → enrich MC → alert queue        │──► Postgres/Redis
+                    │  rotation tracking · reconcile · nightly rescore     │
+                    └──────────────────────────────────────────────────────┘
+                    ┌──────────────────────────────────────────────────────┐
+  Postgres ───────► │  apps/web (Next.js 14) — overview / insiders /       │
+                    │  insider profile / token pages, 5s live feed         │
+                    └──────────────────────────────────────────────────────┘
+```
 
-## Stack
+## Monorepo
 
-- **apps/analyzer** — batch/analysis CLIs (token discovery, early-buyer extraction, funding graph, scoring)
-- **apps/ingest** — Fastify Helius webhook + Telegram bot (grammY) + BullMQ jobs + PumpPortal stream
-- **apps/web** — Next.js 14 dashboard (dark terminal aesthetic)
-- **packages/db** — Drizzle ORM schema + Postgres client
-- **packages/shared** — domain library: Helius client, swap normalization, launch detection, MC derivation, scorer, funding graph
+| Package | What it is |
+|---|---|
+| `apps/analyzer` | Historical analysis CLIs (Phase 1) |
+| `apps/ingest` | Live tracking: webhook, Telegram bot, jobs, PumpPortal (Phases 2 + 4.1/4.2) |
+| `apps/web` | Dashboard (Phase 3) |
+| `packages/db` | Drizzle ORM schema, migrations, Postgres client |
+| `packages/shared` | Domain library: Helius client, swap normalization, launch detection, MC derivation, scorer, funding graph |
+| `fixtures/` | Mock Helius/PumpPortal/DexScreener payloads for tests, sample CSV, demo seed SQL |
+
+## Requirements
+
+- Node.js ≥ 20, pnpm ≥ 9
+- Docker (Postgres 16 + Redis 7 via `docker compose up -d`)
+- A [Helius](https://helius.dev) API key — **the free tier will not survive deep historical
+  crawls**; the Developer plan is the realistic minimum. Every crawl in this repo is page-capped
+  (see tunables) so a single token analysis stays bounded.
+- A Telegram bot token (optional for development — without it, alerts dry-run to the ingest logs)
 
 ## Quick start
 
 ```bash
 pnpm install
-cp .env.example .env        # fill in HELIUS_API_KEY etc.
-docker compose up -d        # postgres:16 + redis:7
-pnpm db:migrate
-pnpm test
+cp .env.example .env          # fill in HELIUS_API_KEY (and Telegram vars for live alerts)
+docker compose up -d          # postgres :5432 + redis :6379
+pnpm db:migrate               # apply committed Drizzle migrations
+pnpm test                     # 97 unit/integration tests (DB suites need DATABASE_URL)
 ```
+
+Preview the dashboard with demo data (no API keys needed):
+
+```bash
+psql postgres://insiderscope:insiderscope@localhost:5432/insiderscope -f fixtures/seed-demo.sql
+pnpm dev:web                  # http://localhost:3000
+```
+
+## Phase 1 — historical pipeline
+
+Typical run, end to end:
+
+```bash
+# 1. Seed candidate tokens (CSV: mint[,symbol[,ath_mc_usd[,name]]], header optional)
+pnpm analyzer import-tokens fixtures/tokens.sample.csv
+
+# 2. (optional, best-effort) refresh ATHs + scan DexScreener boosted/profile feeds
+pnpm analyzer discover
+
+# 3. Crawl launch history and extract early buyers into positions
+pnpm analyzer early-buyers 9BB6NFEcjBCtnNLFko2FqVQBq8HHM13kCyYcdQbgpump
+pnpm analyzer early-buyers --all          # every 'candidate' token
+
+# 4. Build the funding graph and mark creator-linked positions
+pnpm analyzer funding <wallet-address>
+pnpm analyzer funding --all               # every wallet with analyzed positions
+
+# 5. Score everything (fetches each wallet's FULL swap history — losers included)
+pnpm analyzer score                       # or: pnpm analyzer score <wallet>
+```
+
+All commands are idempotent (upserts) — re-running never duplicates rows.
+
+How the crawl stays cheap: for pump.fun tokens the analyzer never crawls the mint (a $10M token's
+mint history is millions of txs). It derives the **bonding curve PDA** and drains that instead —
+the bonding phase is bounded and contains every early buyer. Raydium-native tokens fall back to
+the AMM pool address taken from the DexScreener pair. Historical **entry market caps are derived
+from the swaps themselves** (`SOL in / tokens out × supply`) and converted to USD through an
+hourly SOL/USD cache backfilled from Binance klines — DexScreener has no history.
+
+### Scoring model
+
+```
+score = 25·repeat + 25·creator_link + 20·win_rate + 15·selectivity + 15·timing   (0–100)
+
+repeat        early in how many different $10M+ tokens: 1 → 0.3, 2 → 0.7, 3+ → 1.0
+creator_link  share of big-token positions with a ≤2-hop transfer link (or shared
+              funder) to the token creator; CEX wallets are terminal graph nodes
+win_rate      Laplace-smoothed (wins+1)/(decided+2) over ALL traded tokens
+              (survivorship countermeasure: the full swap history is fetched)
+selectivity   1 − min(1, total_trades/200)
+timing        median entry delay: 5s–10min ideal; <3s = sniper bot → 0,
+              UNLESS the wallet is creator-linked (dev bundles are real insiders)
+```
+
+Auto-blacklist: `total_trades > 500` · `win rate < 30% with ≥5 decided positions` ·
+`median entry < 3s without a creator link`. Tiers: **≥ 70 insider** (requires ≥ 3 early
+positions, otherwise capped at watch), **50–70 watch**. Scored detail is persisted to
+`wallets.score_breakdown` and rendered on the dashboard.
+
+## Phase 2 — live tracking + Telegram
+
+### Telegram setup
+
+1. Create a bot with [@BotFather](https://t.me/BotFather) → `TELEGRAM_BOT_TOKEN`.
+2. Add the bot to your group (or DM it), send a message, then read the chat id from
+   `https://api.telegram.org/bot<TOKEN>/getUpdates` → `TELEGRAM_CHAT_ID` (group ids are negative —
+   keep it quoted). The bot only answers this chat.
+
+### Webhook dev flow (ngrok)
+
+```bash
+ngrok http 3001                          # → https://xxxx.ngrok.app
+# .env: PUBLIC_BASE_URL=https://xxxx.ngrok.app
+#       WEBHOOK_AUTH_HEADER=<long random string>
+pnpm dev:ingest
+```
+
+On boot (and whenever the watch list changes) ingest registers/updates **one** Helius enhanced
+webhook (`SWAP` + `TRANSFER`) for every active `insider`/`watch`/`probation` wallet, pointing at
+`${PUBLIC_BASE_URL}/webhook/helius`. Deliveries are authenticated by the `Authorization` header
+matching `WEBHOOK_AUTH_HEADER`. To test the plumbing yourself: `/add <your-wallet>` in Telegram,
+then make a small swap — the alert should arrive within seconds.
+
+Alert format (Turkish, per design):
+
+```
+🚨 INSIDER BUY
+Cüzdan: memelord (7xF4…k2Qp) — skor 84, 3x winner
+Token: $WIF (EKpQ…BONK)
+Miktar: 12.5 SOL | MC: $45.3K | Launch +4dk
+Rotated wallet: hayır
+Linkler: DexScreener | Solscan | GMGN
+```
+
+Sells use `📉 INSIDER SELL` (disable with `SELL_ALERTS=false`). Live MC resolution:
+DexScreener → PumpPortal bonding-curve cache → derived from the swap itself — so alerts carry an
+MC even before the token is listed anywhere.
+
+### Bot commands
+
+| Command | Effect |
+|---|---|
+| `/list` | Active insider/watch wallets with scores |
+| `/add <addr> [label]` | Track a wallet (tier watch; never downgrades an existing tier) |
+| `/mute <addr>` / `/unmute <addr>` | Suppress/enable its alerts (events still recorded) |
+| `/stats <addr>` | Score breakdown, win rate, PnL, recent positions |
+
+### Rotation tracking
+
+A watched wallet sending **≥ `TRANSFER_MIN_SOL`** (default 5) to an unknown, non-CEX address gets
+that address tracked as `probation` (`parent_wallet` set), capped at `MAX_CHILDREN_PER_PARENT`
+per source. A **delayed (~5 min) check** then applies the CEX-deposit heuristic — a fresh address
+that forwarded ≥90% of received SOL to a known exchange is silently blacklisted; real targets are
+registered with Helius and announced with `ℹ️ WALLET ROTATION`. The probation wallet's first buy
+is alerted with `Rotated wallet: EVET (parent: …)`. Probation wallets that never trade expire
+after `PROBATION_EXPIRY_DAYS` (default 14). Extend the exchange list in
+`packages/shared/src/cex-wallets.ts`.
+
+### Reliability
+
+- **Idempotency**: `live_events (signature, wallet, event_type)` and
+  `transfers (signature, from, to)` composite uniques — webhook retries and reconciliation
+  replays are no-ops.
+- **Reconciliation**: every `RECONCILE_INTERVAL_MIN` (default 5) each watched wallet's txs since
+  its last processed signature are fetched and pushed through the same pipeline — missed webhook
+  deliveries surface here. Events older than `ALERT_MAX_AGE_MIN` are recorded but never alerted.
+- **Rate limits**: one Helius request queue (concurrency `HELIUS_CONCURRENCY`, exponential
+  backoff on 429/5xx honoring Retry-After); Telegram alerts flow through a BullMQ worker limited
+  to ~19 msg/min per chat.
+- **Single instance**: ingest assumes one running process (in-memory watched-set cache,
+  serialized webhook sync).
+
+## Phase 3 — dashboard
+
+```bash
+pnpm dev:web        # http://localhost:3000   (production: pnpm build && pnpm --filter @insiderscope/web start)
+```
+
+- `/` — live 24h feed (5s incremental polling), active-wallet stats, most-bought tokens today
+- `/insiders` — sortable table (score, win rate, PnL, avg entry MC, trades, activity) with tier filter
+- `/insiders/[address]` — score-component breakdown, entry-MC + timing histograms, positions
+  table (entry MC, launch delta, supply %, exit MC, PnL, holding, creator-linked), funding &
+  rotation tree, event timeline
+- `/tokens/[mint]` — early-buyer ranking with insider flags and the creator connection map
+
+Route handlers read Postgres directly through Drizzle — no separate API layer.
+
+## Phase 4 (shipped: 4.1 + 4.2)
+
+- **PumpPortal launch stream** — every new pump.fun token's curve state is cached in Redis
+  (metadata + virtual reserves), so alerts show MC and "Launch +Xdk" before DexScreener lists the
+  token. Mints that watched wallets buy get live trade subscriptions (LRU-capped). Disable with
+  `PUMPPORTAL_ENABLED=false`.
+- **Nightly rescore** — 03:00 UTC: `discover` (ATH refresh + new candidates) and a full
+  `score` pass, then the Helius webhook address list is refreshed.
+
+Not implemented (by design, next iterations): fake-wallet/exit-liquidity ("baiter") detection and
+the Jupiter copy-trade module.
+
+## Configuration
+
+Required: `HELIUS_API_KEY`, `DATABASE_URL`, `REDIS_URL`, `TELEGRAM_BOT_TOKEN`,
+`TELEGRAM_CHAT_ID`, `WEBHOOK_AUTH_HEADER`, `PUBLIC_BASE_URL`, `INGEST_PORT`.
+
+Tunables (defaults in parentheses): `EARLY_WINDOW_MIN` (30), `EARLY_MAX_BUYERS` (150),
+`TRANSFER_MIN_SOL` (5), `SELL_ALERTS` (true), `PROBATION_EXPIRY_DAYS` (14),
+`MAX_CHILDREN_PER_PARENT` (3), `MIN_SCORED_POSITIONS` (3), `ALERT_DEBOUNCE_SEC` (10),
+`ALERT_MAX_AGE_MIN` (15), `RECONCILE_INTERVAL_MIN` (5), `HELIUS_CONCURRENCY` (5),
+`HELIUS_MAX_PAGES_TOKEN` (300), `HELIUS_MAX_PAGES_WALLET` (20), `FUNDING_MAX_FUNDERS` (10),
+`PUMPPORTAL_ENABLED` (true), `DISCOVER_MIN_MC_USD` (10000000), `SOL_PRICE_FALLBACK_USD` (unset).
+
+## Development
+
+```bash
+pnpm test          # vitest across all packages (fixture-driven; DB suites skip without DATABASE_URL)
+pnpm typecheck     # strict tsc across the workspace
+pnpm build         # next build
+pnpm db:generate   # regenerate SQL after editing packages/db/src/schema (commit the output)
+```
+
+Realistic Helius/PumpPortal/DexScreener payload fixtures live in `fixtures/` — the swap
+normalizer, launch detection, classifier, scorer, funding BFS and the idempotent pipeline are all
+unit-tested against them; DB-touching suites run against a real Postgres.
+
+## Known limitations (deliberate MVP trade-offs)
+
+- `discover` is best-effort: there is no public "all pairs ≥ $10M ATH" endpoint, so ATH values
+  are max-observed (or CSV-provided) and the CSV import is the primary seeding path.
+- Post-graduation sell PnL is completed at `score` time (full wallet history), not during the
+  bonding-curve crawl; unrealized PnL is not included in totals (`still_holding` flags it).
+- The funding graph is bounded: last 90 days, top `FUNDING_MAX_FUNDERS` second-hop funders.
+- Rotation alerts are intentionally ~5 minutes delayed by the CEX-deposit check; buy alerts stay
+  real-time.
+- Helius enhanced-parse shapes vary in the wild (pump.fun swaps often lack `events.swap`); all
+  shape assumptions are isolated in `packages/shared/src/helius/normalize.ts` — expect to tune
+  there first if a payload class goes unrecognized.
+
+> Research tooling only — nothing here is financial advice.
