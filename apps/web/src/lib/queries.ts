@@ -7,6 +7,8 @@ import {
   inArray,
   isNotNull,
   liveEvents,
+  lte,
+  paperTrades,
   positions,
   sql,
   tokens,
@@ -15,6 +17,7 @@ import {
   type TokenRow,
   type WalletRow,
 } from '@insiderscope/db';
+import { getConfig } from '@insiderscope/shared';
 
 const dayAgo = () => new Date(Date.now() - 24 * 3600_000);
 
@@ -134,6 +137,63 @@ export async function getTopTokensToday(): Promise<TopToken[]> {
     .orderBy(sql`count(distinct ${liveEvents.wallet}) desc`)
     .limit(10);
   return rows.map((r) => ({ ...r, mint: r.mint! }));
+}
+
+export interface LowCapBuyRow {
+  id: number;
+  ts: string;
+  wallet: string;
+  walletLabel: string | null;
+  walletTier: WalletRow['tier'];
+  mint: string;
+  symbol: string | null;
+  amountSol: number | null;
+  entryMcUsd: number;
+  peakMcUsd: number | null;
+}
+
+/**
+ * The dashboard twin of the 🚀 ERKEN GİRİŞ alert: watched wallets buying while
+ * the token is still small (same bar as the auto-buy). Peak prefers the
+ * paper-trade peak (post-entry only), falling back to the token's observed ATH.
+ */
+export async function getRecentLowCapBuys(): Promise<LowCapBuyRow[]> {
+  const db = getDb();
+  const cfg = getConfig();
+  const rows = await db
+    .select({
+      id: liveEvents.id,
+      ts: liveEvents.ts,
+      wallet: liveEvents.wallet,
+      walletLabel: wallets.label,
+      walletTier: wallets.tier,
+      mint: liveEvents.mint,
+      symbol: tokens.symbol,
+      amountSol: liveEvents.amountSol,
+      entryMcUsd: liveEvents.mcAtEvent,
+      peakMcUsd: sql<number | null>`coalesce(${paperTrades.peakMcUsd}, ${tokens.athMcUsd})`,
+    })
+    .from(liveEvents)
+    .innerJoin(wallets, eq(liveEvents.wallet, wallets.address))
+    .leftJoin(tokens, eq(liveEvents.mint, tokens.mint))
+    .leftJoin(paperTrades, eq(liveEvents.mint, paperTrades.mint))
+    .where(
+      and(
+        eq(liveEvents.eventType, 'buy'),
+        isNotNull(liveEvents.mint),
+        isNotNull(liveEvents.mcAtEvent),
+        lte(liveEvents.mcAtEvent, cfg.AUTOBUY_MAX_MC_USD),
+        gte(liveEvents.ts, new Date(Date.now() - 48 * 3600_000)),
+      ),
+    )
+    .orderBy(desc(liveEvents.ts), desc(liveEvents.id))
+    .limit(20);
+  return rows.map((r) => ({
+    ...r,
+    ts: r.ts.toISOString(),
+    mint: r.mint!,
+    entryMcUsd: r.entryMcUsd!,
+  }));
 }
 
 export interface BubbleWallet {

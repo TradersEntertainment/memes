@@ -1,18 +1,26 @@
 import Link from 'next/link';
 import { AlertFeed } from '@/components/alert-feed';
 import { BubbleMap } from '@/components/bubble-map';
+import { LowCapBuys } from '@/components/low-cap-buys';
 import { Card, Empty, StatCard, td, th, tr } from '@/components/ui';
 import { shortAddr, sol } from '@/lib/format';
-import { getBubbleWallets, getFeed, getOverviewStats, getTopTokensToday } from '@/lib/queries';
+import {
+  getBubbleWallets,
+  getFeed,
+  getOverviewStats,
+  getRecentLowCapBuys,
+  getTopTokensToday,
+} from '@/lib/queries';
 
 export const dynamic = 'force-dynamic';
 
 export default async function OverviewPage() {
-  const [stats, feed, topTokens, bubbleWallets] = await Promise.all([
+  const [stats, feed, topTokens, bubbleWallets, lowCapBuys] = await Promise.all([
     getOverviewStats(),
     getFeed({ limit: 50 }),
     getTopTokensToday(),
     getBubbleWallets(),
+    getRecentLowCapBuys(),
   ]);
 
   return (
@@ -24,6 +32,10 @@ export default async function OverviewPage() {
         <StatCard label="Events 24h" value={stats.events24h} hint="buys, sells, rotations" />
         <StatCard label="Tokens analyzed" value={stats.analyzedTokens} hint="early-buyer crawls" />
       </div>
+
+      <Card title="🚀 Recent low-cap insider buys — last 48h">
+        <LowCapBuys initial={lowCapBuys} />
+      </Card>
 
       <Card
         title={

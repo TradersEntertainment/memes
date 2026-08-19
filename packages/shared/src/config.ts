@@ -3,11 +3,17 @@ import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 
 // Load the repo-root .env regardless of which app's cwd we run under.
-// dotenv never overrides variables that are already set.
+// dotenv never overrides variables that are already set. Best-effort: under a
+// bundler (Next) import.meta.url is not a real file URL — there the platform
+// (Next itself / Railway) already provides process.env, so skipping is correct.
 let envLoaded = false;
 function ensureEnvLoaded(): void {
   if (envLoaded) return;
-  loadDotenv({ path: fileURLToPath(new URL('../../../.env', import.meta.url)) });
+  try {
+    loadDotenv({ path: fileURLToPath(new URL('../../../.env', import.meta.url)) });
+  } catch {
+    // bundled runtime — env comes from the platform
+  }
   envLoaded = true;
 }
 

@@ -196,8 +196,10 @@ pnpm dev:web        # http://localhost:3000   (production: pnpm build && pnpm --
 ```
 
 - `/` — live 24h feed (5s incremental polling), active-wallet stats, most-bought tokens today,
-  and a wallet **bubble map** (area ∝ |realized PnL|, color = tier, every bubble links to the
-  wallet's profile; `/insiders` is its table twin)
+  a **recent low-cap insider buys** board (watched wallets entering tokens still under the
+  auto-buy cap, with entry → peak MC and the X multiple, refreshed every 10s, one-tap
+  GMGN/Jupiter links), and a wallet **bubble map** (area ∝ |realized PnL|, color = tier, every
+  bubble links to the wallet's profile; `/insiders` is its table twin)
 - `/insiders` — sortable table (score, win rate, PnL, avg entry MC, trades, activity) with tier filter
 - `/insiders/[address]` — score-component breakdown, entry-MC + timing histograms, positions
   table (entry MC, launch delta, supply %, exit MC, PnL, holding, creator-linked), funding &
