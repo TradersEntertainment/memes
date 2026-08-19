@@ -6,3 +6,4 @@ export * from './transfers';
 export * from './live-events';
 export * from './alerts';
 export * from './sol-prices';
+export * from './paper-trades';

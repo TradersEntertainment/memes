@@ -23,7 +23,8 @@ describe('formatSwapAlert (Turkish)', () => {
       signature: 'SigWebhookBuy1111111111111111111111111111111',
     });
     const lines = text.split('\n');
-    expect(lines[0]).toBe('🚨 <b>INSIDER BUY</b>');
+    // 4 minutes after launch = the run-and-buy moment → the loud header + buy links
+    expect(lines[0]).toBe('🚀 <b>ERKEN GİRİŞ — INSIDER YENİ TOKEN ALDI</b>');
     expect(lines[1]).toBe('Cüzdan: memelord (Watc…AAAA) — skor 84, 3x winner');
     expect(lines[2]).toBe('Token: $WIF (Meme…pump)');
     expect(lines[3]).toBe('Miktar: 12.5 SOL | MC: $45.3K | Launch +4dk');
@@ -31,6 +32,39 @@ describe('formatSwapAlert (Turkish)', () => {
     expect(lines[5]).toContain('https://dexscreener.com/solana/' + FIX.mint);
     expect(lines[5]).toContain('https://solscan.io/tx/SigWebhookBuy');
     expect(lines[5]).toContain('https://gmgn.ai/sol/token/' + FIX.mint);
+    expect(lines[5]).toContain('https://jup.ag/swap/SOL-' + FIX.mint);
+  });
+
+  it('keeps the plain header (no buy links) for late, big-cap buys', () => {
+    const text = formatSwapAlert({
+      kind: 'buy',
+      wallet: baseWallet,
+      mint: FIX.mint,
+      tokenSymbol: 'WIF',
+      amountSol: 5,
+      mcUsd: 12_000_000,
+      secondsAfterLaunch: 86_400 * 30,
+      rotated: null,
+      signature: 'sig',
+    });
+    expect(text.startsWith('🚨 <b>INSIDER BUY</b>')).toBe(true);
+    expect(text).not.toContain('jup.ag');
+  });
+
+  it('honors config-supplied fresh thresholds', () => {
+    const base = {
+      kind: 'buy' as const,
+      wallet: baseWallet,
+      mint: FIX.mint,
+      tokenSymbol: null,
+      amountSol: 1,
+      mcUsd: 900_000,
+      secondsAfterLaunch: null,
+      rotated: null,
+      signature: 'sig',
+    };
+    expect(formatSwapAlert(base)).toContain('ERKEN GİRİŞ'); // default $1M cap
+    expect(formatSwapAlert({ ...base, freshMaxMcUsd: 500_000 })).toContain('INSIDER BUY');
   });
 
   it('marks rotated probation wallets with the parent', () => {

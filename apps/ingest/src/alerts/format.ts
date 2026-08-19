@@ -23,6 +23,9 @@ export interface SwapAlertInput {
   secondsAfterLaunch: number | null;
   rotated: { parent: string } | null;
   signature: string;
+  /** Fresh-mint emphasis thresholds — pass from config so 🚀 matches auto-buy. */
+  freshMaxAgeSec?: number;
+  freshMaxMcUsd?: number;
 }
 
 export function fmtSol(n: number): string {
@@ -44,16 +47,40 @@ function walletLine(w: AlertWalletInfo): string {
   return parts.length > 0 ? `${name} — ${parts.join(', ')}` : name;
 }
 
-function linksLine(mint: string, signature: string): string {
-  return [
+function linksLine(mint: string, signature: string, withBuyLinks = false): string {
+  const links = [
     `<a href="https://dexscreener.com/solana/${mint}">DexScreener</a>`,
     `<a href="https://solscan.io/tx/${signature}">Solscan</a>`,
     `<a href="https://gmgn.ai/sol/token/${mint}">GMGN</a>`,
-  ].join(' | ');
+  ];
+  if (withBuyLinks) {
+    links.push(`<a href="https://jup.ag/swap/SOL-${mint}">Jupiter'de AL</a>`);
+    links.push(`<a href="https://pump.fun/${mint}">pump.fun</a>`);
+  }
+  return links.join(' | ');
+}
+
+/** "Fresh mint": young launch or still tiny — the run-and-buy moment. */
+export function isFreshMintBuy(
+  i: Pick<SwapAlertInput, 'kind' | 'secondsAfterLaunch' | 'mcUsd' | 'freshMaxAgeSec' | 'freshMaxMcUsd'>,
+): boolean {
+  if (i.kind !== 'buy') return false;
+  const maxAge = i.freshMaxAgeSec ?? 3600;
+  const maxMc = i.freshMaxMcUsd ?? 1_000_000;
+  return (
+    (i.secondsAfterLaunch != null && i.secondsAfterLaunch >= 0 && i.secondsAfterLaunch <= maxAge) ||
+    (i.mcUsd != null && i.mcUsd <= maxMc)
+  );
 }
 
 export function formatSwapAlert(i: SwapAlertInput): string {
-  const header = i.kind === 'buy' ? '🚨 <b>INSIDER BUY</b>' : '📉 <b>INSIDER SELL</b>';
+  const fresh = isFreshMintBuy(i);
+  const header =
+    i.kind === 'sell'
+      ? '📉 <b>INSIDER SELL</b>'
+      : fresh
+        ? '🚀 <b>ERKEN GİRİŞ — INSIDER YENİ TOKEN ALDI</b>'
+        : '🚨 <b>INSIDER BUY</b>';
   const token = i.tokenSymbol
     ? `$${escapeHtml(i.tokenSymbol)} (${shortAddr(i.mint)})`
     : shortAddr(i.mint);
@@ -70,7 +97,7 @@ export function formatSwapAlert(i: SwapAlertInput): string {
     `Token: ${token}`,
     `Miktar: ${amountParts.join(' | ')}`,
     `Rotated wallet: ${rotated}`,
-    `Linkler: ${linksLine(i.mint, i.signature)}`,
+    `Linkler: ${linksLine(i.mint, i.signature, fresh)}`,
   ].join('\n');
 }
 

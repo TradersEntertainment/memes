@@ -1,5 +1,6 @@
 import { and, count, eq, gte, isNotNull, liveEvents, sql, tokens, wallets } from '@insiderscope/db';
 import { escapeHtml, shortAddr } from '@insiderscope/shared';
+import { paperStats } from '../autobuy/tracker';
 import type { AppCtx } from '../context';
 
 const EVENT_TR: Record<string, string> = {
@@ -53,11 +54,29 @@ export async function sendDailyDigest(ctx: AppCtx): Promise<void> {
           .join(', ')
       : '—';
 
+  const paper = await paperStats(db).catch(() => null);
+  const paperLines: string[] = [];
+  if (paper && paper.totalCount > 0) {
+    paperLines.push(
+      `🧪 Oto-alım: ${paper.totalCount} pozisyon (${paper.openCount} açık)${
+        paper.avgX != null ? ` · ort ${paper.avgX.toFixed(1)}x · maks ${paper.maxX?.toFixed(1)}x` : ''
+      }`,
+    );
+    if (paper.best.length > 0) {
+      paperLines.push(
+        `En iyiler: ${paper.best
+          .map((b) => `${b.symbol ? `$${escapeHtml(b.symbol)}` : shortAddr(b.mint)} ${b.x.toFixed(1)}x`)
+          .join(' · ')} — detay: /autobuy`,
+      );
+    }
+  }
+
   const text = [
     `📊 <b>Günlük özet</b> (son 24 saat)`,
     `Olaylar: ${eventLine}`,
     `En çok alınan: ${tokenLine}`,
     `İzleme: ⭐ ${tiers.insider ?? 0} insider · 👀 ${tiers.watch ?? 0} watch · 🕒 ${tiers.probation ?? 0} probation`,
+    ...paperLines,
   ].join('\n');
   await ctx.alertsQueue.add('custom', { custom: { text } });
 }

@@ -1,4 +1,5 @@
 import { count, eq, tokens, wallets } from '@insiderscope/db';
+import { paperStats } from './autobuy/tracker';
 import type { AppCtx } from './context';
 
 export interface HealthProblem {
@@ -44,6 +45,16 @@ export async function buildHealthReport(ctx: AppCtx): Promise<HealthReport> {
     lines.push(
       `👥 Cüzdanlar: ⭐ ${w.insider ?? 0} insider · 👀 ${w.watch ?? 0} watch · 🕒 ${w.probation ?? 0} probation · 🚫 ${w.blacklist ?? 0} blacklist · ❔ ${w.unranked ?? 0} puansız`,
     );
+    if (ctx.cfg.AUTOBUY_ENABLED) {
+      const paper = await paperStats(ctx.db);
+      const mode =
+        ctx.cfg.AUTOBUY_DRY_RUN || !ctx.cfg.AUTOBUY_WALLET_SECRET ? 'dry-run' : 'CANLI';
+      lines.push(
+        `🤖 Oto-alım: ${mode} · bugün ${paper.spentTodaySol}/${ctx.cfg.AUTOBUY_DAILY_CAP_SOL} SOL · ${paper.openCount} açık pozisyon${
+          paper.maxX != null ? ` · maks ${paper.maxX.toFixed(1)}x` : ''
+        }`,
+      );
+    }
   } catch {
     lines.push('🗄️ Veritabanına ERİŞİLEMİYOR');
     problems.push({ key: 'db', text: 'Veritabanına erişilemiyor' });

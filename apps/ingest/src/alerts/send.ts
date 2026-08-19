@@ -80,6 +80,8 @@ export async function sendSwapAlert(ctx: SendCtx, eventId: number): Promise<void
         ? { parent: wallet.parentWallet }
         : null,
     signature: event.signature,
+    freshMaxAgeSec: ctx.cfg.AUTOBUY_MAX_MINT_AGE_MIN * 60,
+    freshMaxMcUsd: ctx.cfg.AUTOBUY_MAX_MC_USD,
   });
   await deliver(ctx, text, eventId);
 }

@@ -94,6 +94,28 @@ const EnvSchema = z.object({
   WATCH_FLOOR: z.coerce.number().int().nonnegative().default(12),
   /** Track pump.fun graduations (bonding-curve completions) as future candidates. */
   TRACK_GRADUATIONS: boolFromEnv(true),
+  /**
+   * Auto-buy on insider fresh-mint entries. Ships in DRY-RUN: every signal
+   * opens a simulated position whose market-cap multiple is tracked and
+   * reported — no real money moves until AUTOBUY_DRY_RUN=false AND
+   * AUTOBUY_WALLET_SECRET is set (use a separate low-balance burner wallet).
+   */
+  AUTOBUY_ENABLED: boolFromEnv(true),
+  AUTOBUY_DRY_RUN: boolFromEnv(true),
+  /** SOL per trade (also the simulated size in dry-run). */
+  AUTOBUY_SOL_PER_TRADE: z.coerce.number().positive().default(0.25),
+  /** Hard daily spend ceiling across all buys, real and simulated alike. */
+  AUTOBUY_DAILY_CAP_SOL: z.coerce.number().positive().default(1.25),
+  /** "Fresh mint": bought within this many minutes of launch... */
+  AUTOBUY_MAX_MINT_AGE_MIN: z.coerce.number().positive().default(60),
+  /** ...or (when launch time is unknown) below this market cap. */
+  AUTOBUY_MAX_MC_USD: z.coerce.number().positive().default(1_000_000),
+  /** Wallet tiers whose buys may trigger the auto-buy. */
+  AUTOBUY_TIERS: z.string().default('insider,watch'),
+  AUTOBUY_SLIPPAGE_PCT: z.coerce.number().positive().default(15),
+  AUTOBUY_PRIORITY_FEE_SOL: z.coerce.number().positive().default(0.001),
+  /** bs58 secret key of the trading wallet — live mode only. NEVER your main wallet. */
+  AUTOBUY_WALLET_SECRET: z.string().default(''),
   PUMPPORTAL_ENABLED: boolFromEnv(true),
   DISCOVER_MIN_MC_USD: z.coerce.number().positive().default(10_000_000),
   /**

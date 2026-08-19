@@ -162,6 +162,7 @@ MC even before the token is listed anywhere.
 | `/tokens <mint>…` | Queue candidate tokens for the next analysis pass |
 | `/scan` | Run the full pipeline now (same job the nightly cron runs) |
 | `/health` | Component snapshot: DB/tier counts, Helius circuit, webhook, PumpPortal, queues |
+| `/autobuy` | Auto-buy scoreboard (positions + X multiples); `on`/`off` toggles the kill switch |
 
 ### Rotation tracking
 
@@ -264,8 +265,30 @@ Route handlers read Postgres directly through Drizzle — no separate API layer.
   to `seed.csv` persist (comment lines out with `#` to disable tokens), deleting it restores the
   defaults, and without a volume the bundled seed is imported directly.
 
+### Auto-buy (paper-first)
+
+When a watched insider/watch wallet buys a **fresh mint** (launched < `AUTOBUY_MAX_MINT_AGE_MIN`
+minutes ago, or still under `AUTOBUY_MAX_MC_USD`), the executor opens a position — this is the
+"they just launched it, run" moment, automated. It ships in **dry-run**: no real money moves;
+every signal records a simulated `AUTOBUY_SOL_PER_TRADE` buy in `paper_trades`, the token's
+market cap is tracked live (event stream + hourly refresh), and milestone messages report
+**how many X** the entry did (2x/5x/10x/...; MC multiple = price multiple at fixed supply).
+Positions stop tracking after 14 days — the recorded peak is the verdict. `/autobuy` shows the
+scoreboard; `/autobuy off|on` is the kill switch.
+
+Guardrails (enforced identically in dry-run and live): one position per mint ever, daily SOL
+ceiling (`AUTOBUY_DAILY_CAP_SOL`), tier filter (`AUTOBUY_TIERS`), stale/backfilled events never
+trigger, muted wallets never trigger.
+
+**Going live** (only after the dry-run scoreboard convinces you): create a **separate burner
+wallet**, fund it with a small amount, set `AUTOBUY_WALLET_SECRET` (bs58) and
+`AUTOBUY_DRY_RUN=false`. Execution is self-custody: PumpPortal's `trade-local` builds the
+transaction, it is signed locally with your key and sent through Helius RPC — the key never
+leaves your server. Selling stays manual (GMGN/Jupiter links in every alert); automated
+take-profit is a future iteration informed by the paper data. Never use your main wallet.
+
 Not implemented (by design, next iterations): fake-wallet/exit-liquidity ("baiter") detection and
-the Jupiter copy-trade module.
+automated selling / take-profit.
 
 ## Configuration
 

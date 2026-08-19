@@ -18,6 +18,8 @@ export const BINANCE_API_BASE = 'https://api.binance.com';
 export const COINBASE_API_BASE = 'https://api.coinbase.com';
 export const COINBASE_EXCHANGE_API_BASE = 'https://api.exchange.coinbase.com';
 export const PUMPPORTAL_WS_URL = 'wss://pumpportal.fun/api/data';
+/** Self-custody trade builder: returns a serialized tx to sign locally. */
+export const PUMPPORTAL_TRADE_LOCAL_URL = 'https://pumpportal.fun/api/trade-local';
 
 /** Average Solana slot time — used to derive sub-second entry timing from slot deltas. */
 export const SLOT_MS = 400;

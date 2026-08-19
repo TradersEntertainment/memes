@@ -3,6 +3,7 @@ import {
   desc,
   eq,
   inArray,
+  paperTrades,
   positions,
   sql,
   tokens,
@@ -15,6 +16,7 @@ import {
   shortAddr,
 } from '@insiderscope/shared';
 import type { Bot, CommandContext, Context } from 'grammy';
+import { paperStats } from '../autobuy/tracker';
 import type { AppCtx } from '../context';
 import { buildHealthReport } from '../health';
 import { maybeAutoScan } from '../jobs/nightly-rescore';
@@ -31,6 +33,7 @@ const HELP = [
   '/scan — tam analiz turunu şimdi başlat (gece 03:00 UTC otomatik çalışır)',
   '/tokens &lt;mint&gt;[,&lt;mint&gt;…] — aday token ekle, sonraki turda taranır',
   '/health — sistem durumu (webhook, Helius, PumpPortal, kuyruklar)',
+  '/autobuy — oto-alım durumu + pozisyonların kaç X yaptığı (on/off ile durdur/başlat)',
 ].join('\n');
 
 const tierEmoji: Record<string, string> = {
@@ -167,6 +170,67 @@ export function registerCommands(bot: Bot, ctx: AppCtx): void {
       lines.push('', '⚠️ Aktif sorunlar:', ...report.problems.map((p) => `• ${p.text}`));
     } else {
       lines.push('', 'Her şey yolunda ✅');
+    }
+    await c.reply(lines.join('\n'), { parse_mode: 'HTML' });
+  });
+
+  bot.command('autobuy', async (c) => {
+    const arg = (c.match ?? '').trim().toLowerCase();
+    if (arg === 'off') {
+      await ctx.redis.set('is:autobuy:paused', '1');
+      await c.reply('⏸️ Oto-alım DURDURULDU (dry-run dahil). /autobuy on ile açılır.');
+      return;
+    }
+    if (arg === 'on') {
+      await ctx.redis.del('is:autobuy:paused');
+      await c.reply('▶️ Oto-alım açıldı.');
+      return;
+    }
+
+    const paused = (await ctx.redis.get('is:autobuy:paused')) === '1';
+    const stats = await paperStats(db);
+    const open = await db
+      .select({
+        mint: paperTrades.mint,
+        symbol: tokens.symbol,
+        entryMcUsd: paperTrades.entryMcUsd,
+        peakMcUsd: paperTrades.peakMcUsd,
+        isLive: paperTrades.isLive,
+        entryTs: paperTrades.entryTs,
+      })
+      .from(paperTrades)
+      .leftJoin(tokens, eq(paperTrades.mint, tokens.mint))
+      .where(eq(paperTrades.status, 'open'))
+      .orderBy(desc(paperTrades.entryTs))
+      .limit(15);
+
+    const mode = paused
+      ? '⏸️ duraklatıldı'
+      : ctx.cfg.AUTOBUY_DRY_RUN || !ctx.cfg.AUTOBUY_WALLET_SECRET
+        ? '🧪 dry-run (gerçek para YOK)'
+        : '🤖 CANLI';
+    const lines = [
+      `🤖 <b>Oto-alım</b> — ${mode}`,
+      `Sinyal: insider taze-mint alımı (≤${ctx.cfg.AUTOBUY_MAX_MINT_AGE_MIN}dk veya ≤${fmtUsdCompact(ctx.cfg.AUTOBUY_MAX_MC_USD)} MC)`,
+      `Bugün: ${stats.spentTodaySol}/${ctx.cfg.AUTOBUY_DAILY_CAP_SOL} SOL · işlem başına ${ctx.cfg.AUTOBUY_SOL_PER_TRADE} SOL`,
+      `Toplam ${stats.totalCount} pozisyon (${stats.openCount} açık)${
+        stats.avgX != null ? ` · ort ${stats.avgX.toFixed(1)}x · maks ${stats.maxX?.toFixed(1)}x` : ''
+      }`,
+    ];
+    if (open.length > 0) {
+      lines.push('', 'Açık pozisyonlar (giriş → tepe):');
+      for (const p of open) {
+        const name = p.symbol ? `$${escapeHtml(p.symbol)}` : shortAddr(p.mint);
+        const x =
+          p.entryMcUsd != null && p.entryMcUsd > 0 && p.peakMcUsd != null
+            ? `${(p.peakMcUsd / p.entryMcUsd).toFixed(1)}x`
+            : '?';
+        lines.push(
+          `${p.isLive ? '🤖' : '🧪'} ${name}: ${fmtUsdCompact(p.entryMcUsd)} → ${fmtUsdCompact(p.peakMcUsd)} = <b>${x}</b>`,
+        );
+      }
+    } else {
+      lines.push('', 'Henüz pozisyon yok — ilk insider taze-mint alımında burada görünür.');
     }
     await c.reply(lines.join('\n'), { parse_mode: 'HTML' });
   });

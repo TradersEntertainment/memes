@@ -14,6 +14,8 @@
     "@insiderscope/analyzer": "workspace:*",
     "@insiderscope/db": "workspace:*",
     "@insiderscope/shared": "workspace:*",
+    "@solana/web3.js": "^1.98.4",
+    "bs58": "^6.0.0",
     "bullmq": "^5.34.0",
     "fastify": "^5.2.0",
     "grammy": "^1.34.0",

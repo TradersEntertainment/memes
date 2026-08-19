@@ -31,6 +31,15 @@ export interface PipelineDeps {
   trackMint?: (mint: string) => void;
   /** Send a pre-formatted composite alert (confluence etc.) through the queue. */
   enqueueCustomAlert?: (text: string) => Promise<void>;
+  /** Auto-buy hook: a non-muted watched wallet just bought (executor filters further). */
+  onInsiderBuy?: (signal: {
+    wallet: WatchedWallet;
+    mint: string;
+    mcUsd: number | null;
+    ts: Date;
+  }) => Promise<void>;
+  /** Feed a fresh MC into any open auto-buy position on this mint. */
+  updatePaperMc?: (mint: string, mcUsd: number) => Promise<void>;
   log: (msg: string) => void;
 }
 
@@ -97,6 +106,17 @@ async function handleEvent(
         .update(liveEvents)
         .set({ mcAtEvent: mc.mcUsd })
         .where(eq(liveEvents.id, row.id));
+      // Any watched-wallet trade with a known MC refreshes open paper positions.
+      if (deps.updatePaperMc) {
+        void deps.updatePaperMc(ev.swap.mint, mc.mcUsd).catch((err) =>
+          deps.log(`paper-mc update failed: ${err}`),
+        );
+      }
+    }
+    if (ev.kind === 'buy' && !ev.wallet.muted && deps.onInsiderBuy) {
+      void deps
+        .onInsiderBuy({ wallet: ev.wallet, mint: ev.swap.mint, mcUsd: mc.mcUsd, ts })
+        .catch((err) => deps.log(`auto-buy hook failed: ${err}`));
     }
 
     const ageMin = (Date.now() - ts.getTime()) / 60_000;

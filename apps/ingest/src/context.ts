@@ -14,6 +14,8 @@ import type { Queue } from 'bullmq';
 import IORedis from 'ioredis';
 import type { Bot } from 'grammy';
 import { createAlertsQueue } from './alerts/queue';
+import { maybeAutoBuy, type AutoBuyDeps } from './autobuy/executor';
+import { updatePaperMc } from './autobuy/tracker';
 import { createBot } from './bot/bot';
 import { makeResolveMc } from './pipeline/enrich';
 import { handleTransferOut, type RotationDeps } from './pipeline/rotation';
@@ -135,6 +137,20 @@ export function buildAppCtx(): AppCtx {
     },
   };
 
+  // Auto-buy (dry-run first): the pipeline hands every fresh insider buy to the
+  // executor; the executor's guardrails decide, and paper positions get their
+  // MC refreshed by the same event stream.
+  const autoBuyDeps: AutoBuyDeps = {
+    db,
+    cfg,
+    log,
+    pumpCache,
+    helius,
+    isPaused: async () => (await redis.get('is:autobuy:paused')) === '1',
+    notify: enqueueCustomAlert,
+    trackMint: (mint) => pumpPortal?.trackMint(mint),
+  };
+
   const pipeline: PipelineDeps = {
     db,
     cfg,
@@ -149,6 +165,13 @@ export function buildAppCtx(): AppCtx {
     onTransferOut: (input) => handleTransferOut(rotationDeps, input),
     trackMint: (mint) => pumpPortal?.trackMint(mint),
     enqueueCustomAlert,
+    onInsiderBuy: async (signal) => {
+      await maybeAutoBuy(autoBuyDeps, signal);
+    },
+    updatePaperMc: async (mint, mcUsd) => {
+      const milestone = await updatePaperMc(db, mint, mcUsd);
+      if (milestone) await enqueueCustomAlert(milestone);
+    },
   };
 
   const ctx: AppCtx = {

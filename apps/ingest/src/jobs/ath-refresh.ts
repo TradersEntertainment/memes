@@ -1,6 +1,7 @@
 import { crawlableCandidatesWhere, sweepRecentRunners, upsertToken } from '@insiderscope/analyzer';
 import { and, eq, gte, isNotNull, isNull, liveEvents, sql, tokens } from '@insiderscope/db';
 import { bestPair, chunk, discoveryFloorUsd, getPairsForTokens, pairMcUsd } from '@insiderscope/shared';
+import { closeStalePaperTrades, openPaperMints, updatePaperMc } from '../autobuy/tracker';
 import type { AppCtx } from '../context';
 import { maybeAutoScan } from './nightly-rescore';
 
@@ -31,8 +32,10 @@ export async function refreshAth(ctx: AppCtx): Promise<void> {
       ),
     );
   const knownSet = new Set(known.map((r) => r.mint));
-  const mints = [...new Set([...knownSet, ...bought.map((r) => r.mint!)])];
+  const paperMints = await openPaperMints(db).catch(() => [] as string[]);
+  const mints = [...new Set([...knownSet, ...bought.map((r) => r.mint!), ...paperMints])];
   if (mints.length === 0) return;
+  const paperSet = new Set(paperMints);
 
   let refreshed = 0;
   let discovered = 0;
@@ -42,6 +45,10 @@ export async function refreshAth(ctx: AppCtx): Promise<void> {
       const pair = bestPair(pairs);
       const mcUsd = pairMcUsd(pair);
       if (!pair || mcUsd == null) continue;
+      if (paperSet.has(mint)) {
+        const milestone = await updatePaperMc(db, mint, mcUsd).catch(() => null);
+        if (milestone) await ctx.alertsQueue.add('custom', { custom: { text: milestone } });
+      }
       // Small live buy — not our universe yet. Fresh pairs qualify at the lower
       // recency bar, older ones need the full threshold.
       if (!knownSet.has(mint) && mcUsd < discoveryFloorUsd(cfg, pair.pairCreatedAt)) continue;
@@ -58,6 +65,11 @@ export async function refreshAth(ctx: AppCtx): Promise<void> {
       else discovered += 1;
     }
   }
+
+  // Auto-buy bookkeeping: positions older than two weeks stop tracking — the
+  // recorded peak is their final "how many X" verdict.
+  const closed = await closeStalePaperTrades(db).catch(() => 0);
+  if (closed > 0) log(`ath-refresh: ${closed} paper trade(s) closed after 14 days`);
 
   // Prune dead graduates: tracked bonding-curve completions that never went
   // anywhere keep the hourly refresh cheap by leaving after two weeks (only
