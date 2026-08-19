@@ -196,6 +196,87 @@ export async function getRecentLowCapBuys(): Promise<LowCapBuyRow[]> {
   }));
 }
 
+export interface PortfolioRow {
+  id: number;
+  mint: string;
+  symbol: string | null;
+  triggerWallet: string | null;
+  triggerLabel: string | null;
+  isLive: boolean;
+  status: 'open' | 'closed';
+  solSpent: number;
+  entryTs: string;
+  entryMcUsd: number | null;
+  lastMcUsd: number | null;
+  peakMcUsd: number | null;
+}
+
+export interface Portfolio {
+  rows: PortfolioRow[];
+  stats: {
+    totalCount: number;
+    openCount: number;
+    spentSol: number;
+    /** Σ solSpent × (last/entry) — the wallet's worth at current prices. */
+    currentValueSol: number;
+    /** Σ solSpent × (peak/entry) — if every position had been sold at its top. */
+    peakValueSol: number;
+    maxX: number | null;
+  };
+}
+
+/** The auto-buy simulation portfolio: every paper/live position + totals. */
+export async function getPaperPortfolio(): Promise<Portfolio> {
+  const db = getDb();
+  const rows = await db
+    .select({
+      id: paperTrades.id,
+      mint: paperTrades.mint,
+      symbol: tokens.symbol,
+      triggerWallet: paperTrades.wallet,
+      triggerLabel: wallets.label,
+      isLive: paperTrades.isLive,
+      status: paperTrades.status,
+      solSpent: paperTrades.solSpent,
+      entryTs: paperTrades.entryTs,
+      entryMcUsd: paperTrades.entryMcUsd,
+      lastMcUsd: paperTrades.lastMcUsd,
+      peakMcUsd: paperTrades.peakMcUsd,
+    })
+    .from(paperTrades)
+    .leftJoin(tokens, eq(paperTrades.mint, tokens.mint))
+    .leftJoin(wallets, eq(paperTrades.wallet, wallets.address))
+    .orderBy(desc(paperTrades.entryTs), desc(paperTrades.id))
+    .limit(100);
+
+  const xNow = sql<number>`coalesce(${paperTrades.lastMcUsd} / nullif(${paperTrades.entryMcUsd}, 0), 1)`;
+  const xPeak = sql<number>`coalesce(${paperTrades.peakMcUsd} / nullif(${paperTrades.entryMcUsd}, 0), 1)`;
+  const agg = (
+    await db
+      .select({
+        totalCount: sql<number>`count(*)::int`,
+        openCount: sql<number>`count(*) filter (where ${paperTrades.status} = 'open')::int`,
+        spentSol: sql<number>`coalesce(sum(${paperTrades.solSpent}), 0)::float8`,
+        currentValueSol: sql<number>`coalesce(sum(${paperTrades.solSpent} * ${xNow}), 0)::float8`,
+        peakValueSol: sql<number>`coalesce(sum(${paperTrades.solSpent} * ${xPeak}), 0)::float8`,
+        maxX: sql<number | null>`max(${paperTrades.peakMcUsd} / nullif(${paperTrades.entryMcUsd}, 0))::float8`,
+      })
+      .from(paperTrades)
+  )[0];
+
+  return {
+    rows: rows.map((r) => ({ ...r, entryTs: r.entryTs.toISOString() })),
+    stats: {
+      totalCount: agg?.totalCount ?? 0,
+      openCount: agg?.openCount ?? 0,
+      spentSol: agg?.spentSol ?? 0,
+      currentValueSol: agg?.currentValueSol ?? 0,
+      peakValueSol: agg?.peakValueSol ?? 0,
+      maxX: agg?.maxX ?? null,
+    },
+  };
+}
+
 export interface BubbleWallet {
   address: string;
   label: string | null;

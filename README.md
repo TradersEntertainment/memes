@@ -200,6 +200,9 @@ pnpm dev:web        # http://localhost:3000   (production: pnpm build && pnpm --
   auto-buy cap, with entry → peak MC and the X multiple, refreshed every 10s, one-tap
   GMGN/Jupiter links), and a wallet **bubble map** (area ∝ |realized PnL|, color = tier, every
   bubble links to the wallet's profile; `/insiders` is its table twin)
+- `/portfolio` — the auto-buy **simulation portfolio**: every 🧪 dry-run (and 🤖 live) position
+  with entry → now/peak market caps, X multiples, per-position and total SOL value (buy-and-hold;
+  selling not modeled yet), trigger wallet links, 10s refresh
 - `/insiders` — sortable table (score, win rate, PnL, avg entry MC, trades, activity) with tier filter
 - `/insiders/[address]` — "Who is this?" identity card (which runners it entered early and at
   what cap vs. the token's peak, whale-sized supply positions, creator links, rotation origin),

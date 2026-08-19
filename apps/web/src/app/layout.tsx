@@ -23,6 +23,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             <Link href="/insiders" className="text-ink-2 hover:text-ink">
               insiders
             </Link>
+            <Link href="/portfolio" className="text-ink-2 hover:text-ink">
+              portfolio
+            </Link>
             <span className="ml-auto flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-ink-3">
               <span className="inline-block h-1.5 w-1.5 rounded-full bg-buy" />
               live
