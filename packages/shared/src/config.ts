@@ -1,18 +1,35 @@
 import { config as loadDotenv } from 'dotenv';
-import { fileURLToPath } from 'node:url';
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { z } from 'zod';
 
-// Load the repo-root .env regardless of which app's cwd we run under.
-// dotenv never overrides variables that are already set. Best-effort: under a
-// bundler (Next) import.meta.url is not a real file URL — there the platform
-// (Next itself / Railway) already provides process.env, so skipping is correct.
+// Load the repo-root .env regardless of which app's cwd we run under, by
+// walking up from cwd. Deliberately NOT `new URL('...', import.meta.url)`:
+// webpack resolves that pattern at BUILD time and fails the whole compile when
+// .env doesn't exist (fresh CI/Railway clones — .env is gitignored). dotenv
+// never overrides variables that are already set; with no file found the
+// platform's process.env is the source of truth.
 let envLoaded = false;
+
+function findRootEnv(): string | null {
+  let dir = process.cwd();
+  for (let i = 0; i < 5; i++) {
+    const candidate = resolve(dir, '.env');
+    if (existsSync(candidate)) return candidate;
+    const parent = resolve(dir, '..');
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return null;
+}
+
 function ensureEnvLoaded(): void {
   if (envLoaded) return;
   try {
-    loadDotenv({ path: fileURLToPath(new URL('../../../.env', import.meta.url)) });
+    const path = findRootEnv();
+    if (path) loadDotenv({ path });
   } catch {
-    // bundled runtime — env comes from the platform
+    // sandboxed/bundled runtime — env comes from the platform
   }
   envLoaded = true;
 }

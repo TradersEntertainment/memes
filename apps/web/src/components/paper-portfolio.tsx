@@ -59,16 +59,12 @@ export function PaperPortfolio({ initial }: { initial: Portfolio }) {
         />
         <StatCard label="Sim spent" value={`${sol(stats.spentSol)} SOL`} hint="0-risk paper buys" />
         <StatCard
-          label="Value now"
-          value={`${sol(stats.currentValueSol)} SOL`}
-          hint="at current prices, buy-and-hold"
-        />
-        <StatCard
           label="Peak value"
           value={`${sol(stats.peakValueSol)} SOL`}
           hint="if every top had been sold"
         />
-        <StatCard label="Best X" value={xText(stats.maxX)} hint="single best position" />
+        <StatCard label="Best X" value={xText(stats.maxX)} hint="highest peak multiple" />
+        <StatCard label="Worst dip" value={xText(stats.minX)} hint="lowest trough multiple" />
       </div>
 
       {rows.length === 0 ? (
@@ -82,10 +78,11 @@ export function PaperPortfolio({ initial }: { initial: Portfolio }) {
                 <th className={th}>Trigger wallet</th>
                 <th className={th}>Bought</th>
                 <th className={`${th} text-right`}>Entry MC</th>
-                <th className={`${th} text-right`}>Now</th>
                 <th className={`${th} text-right`}>Peak</th>
+                <th className={`${th} text-right`}>Dip</th>
+                <th className={`${th} text-right`}>X max</th>
+                <th className={`${th} text-right`}>X min</th>
                 <th className={`${th} text-right`}>X now</th>
-                <th className={`${th} text-right`}>X peak</th>
                 <th className={`${th} text-right`}>Value</th>
                 <th className={th}>Status</th>
                 <th className={th}>Links</th>
@@ -93,14 +90,10 @@ export function PaperPortfolio({ initial }: { initial: Portfolio }) {
             </thead>
             <tbody>
               {rows.map((r) => {
-                const xNow =
-                  r.entryMcUsd != null && r.entryMcUsd > 0 && r.lastMcUsd != null
-                    ? r.lastMcUsd / r.entryMcUsd
-                    : null;
-                const xPeak =
-                  r.entryMcUsd != null && r.entryMcUsd > 0 && r.peakMcUsd != null
-                    ? r.peakMcUsd / r.entryMcUsd
-                    : null;
+                const ok = r.entryMcUsd != null && r.entryMcUsd > 0;
+                const xNow = ok && r.lastMcUsd != null ? r.lastMcUsd / r.entryMcUsd! : null;
+                const xPeak = ok && r.peakMcUsd != null ? r.peakMcUsd / r.entryMcUsd! : null;
+                const xMin = ok && r.troughMcUsd != null ? r.troughMcUsd / r.entryMcUsd! : null;
                 const valueSol = xNow != null ? r.solSpent * xNow : null;
                 return (
                   <tr key={r.id} className={tr}>
@@ -125,11 +118,16 @@ export function PaperPortfolio({ initial }: { initial: Portfolio }) {
                       {timeAgo(r.entryTs)}
                     </td>
                     <td className={`${td} text-right text-ink-2`}>{usd(r.entryMcUsd)}</td>
-                    <td className={`${td} text-right text-ink-2`}>{usd(r.lastMcUsd)}</td>
                     <td className={`${td} text-right text-ink-2`}>{usd(r.peakMcUsd)}</td>
-                    <td className={`${td} text-right ${xClass(xNow)}`}>{xText(xNow)}</td>
-                    <td className={`${td} text-right ${xClass(xPeak)}`}>{xText(xPeak)}</td>
-                    <td className={`${td} text-right`}>
+                    <td className={`${td} text-right text-ink-2`}>{usd(r.troughMcUsd)}</td>
+                    <td className={`${td} text-right ${xClass(xPeak)}`}>
+                      <b>{xText(xPeak)}</b>
+                    </td>
+                    <td className={`${td} text-right ${xClass(xMin)}`}>
+                      <b>{xText(xMin)}</b>
+                    </td>
+                    <td className={`${td} text-right text-ink-2`}>{xText(xNow)}</td>
+                    <td className={`${td} text-right text-ink-2`}>
                       {valueSol != null ? `${sol(valueSol)} SOL` : '—'}
                     </td>
                     <td className={td}>
@@ -162,9 +160,10 @@ export function PaperPortfolio({ initial }: { initial: Portfolio }) {
       )}
 
       <p className="text-[11px] text-ink-3">
-        Buy-and-hold simulation: selling isn&apos;t modeled yet — &quot;Value&quot; assumes still
-        holding at current prices. Closed rows stopped tracking after 14 days; their peak is the
-        final verdict. 🧪 = dry-run (no real money), 🤖 = real buy.
+        Buy-and-hold simulation: selling isn&apos;t modeled yet, so the permanent verdict of each
+        entry is <b>X max</b> (peak) and <b>X min</b> (dip) — &quot;X now&quot; and
+        &quot;Value&quot; are just today&apos;s snapshot. Closed rows froze after 14 days.
+        🧪 = dry-run (no real money), 🤖 = real buy.
       </p>
     </div>
   );

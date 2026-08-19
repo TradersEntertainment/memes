@@ -28,6 +28,9 @@ export const paperTrades = pgTable(
     entryTs: timestamp('entry_ts', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
     peakMcUsd: doublePrecision('peak_mc_usd'),
     peakTs: timestamp('peak_ts', { withTimezone: true, mode: 'date' }),
+    /** Lowest MC seen since entry — with peak it is the position's permanent verdict. */
+    troughMcUsd: doublePrecision('trough_mc_usd'),
+    troughTs: timestamp('trough_ts', { withTimezone: true, mode: 'date' }),
     lastMcUsd: doublePrecision('last_mc_usd'),
     lastCheckTs: timestamp('last_check_ts', { withTimezone: true, mode: 'date' }),
     /** Highest multiple already announced (2/5/10/25...) so milestones fire once. */

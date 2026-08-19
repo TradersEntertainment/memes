@@ -195,6 +195,7 @@ export function registerCommands(bot: Bot, ctx: AppCtx): void {
         symbol: tokens.symbol,
         entryMcUsd: paperTrades.entryMcUsd,
         peakMcUsd: paperTrades.peakMcUsd,
+        troughMcUsd: paperTrades.troughMcUsd,
         isLive: paperTrades.isLive,
         entryTs: paperTrades.entryTs,
       })
@@ -218,15 +219,15 @@ export function registerCommands(bot: Bot, ctx: AppCtx): void {
       }`,
     ];
     if (open.length > 0) {
-      lines.push('', 'Açık pozisyonlar (giriş → tepe):');
+      lines.push('', 'Açık pozisyonlar (giriş → tepe, dip):');
       for (const p of open) {
         const name = p.symbol ? `$${escapeHtml(p.symbol)}` : shortAddr(p.mint);
-        const x =
-          p.entryMcUsd != null && p.entryMcUsd > 0 && p.peakMcUsd != null
-            ? `${(p.peakMcUsd / p.entryMcUsd).toFixed(1)}x`
-            : '?';
+        const ok = p.entryMcUsd != null && p.entryMcUsd > 0;
+        const x = ok && p.peakMcUsd != null ? `${(p.peakMcUsd / p.entryMcUsd!).toFixed(1)}x` : '?';
+        const dip =
+          ok && p.troughMcUsd != null ? ` (dip ${(p.troughMcUsd / p.entryMcUsd!).toFixed(1)}x)` : '';
         lines.push(
-          `${p.isLive ? '🤖' : '🧪'} ${name}: ${fmtUsdCompact(p.entryMcUsd)} → ${fmtUsdCompact(p.peakMcUsd)} = <b>${x}</b>`,
+          `${p.isLive ? '🤖' : '🧪'} ${name}: ${fmtUsdCompact(p.entryMcUsd)} → ${fmtUsdCompact(p.peakMcUsd)} = <b>${x}</b>${dip}`,
         );
       }
     } else {

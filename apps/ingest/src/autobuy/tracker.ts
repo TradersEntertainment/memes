@@ -23,6 +23,9 @@ export async function updatePaperMc(
       lastCheckTs: sql`now()`,
       peakTs: sql`case when ${mcUsd} > coalesce(${paperTrades.peakMcUsd}, 0) then now() else ${paperTrades.peakTs} end`,
       peakMcUsd: sql`greatest(coalesce(${paperTrades.peakMcUsd}, 0), ${mcUsd})`,
+      // The other half of the permanent verdict: the lowest point since entry.
+      troughTs: sql`case when ${mcUsd} < coalesce(${paperTrades.troughMcUsd}, ${paperTrades.entryMcUsd}, ${mcUsd} + 1) then now() else ${paperTrades.troughTs} end`,
+      troughMcUsd: sql`least(coalesce(${paperTrades.troughMcUsd}, ${paperTrades.entryMcUsd}, ${mcUsd}), ${mcUsd})`,
     })
     .where(and(eq(paperTrades.mint, mint), eq(paperTrades.status, 'open')))
     .returning({
@@ -83,6 +86,8 @@ export interface PaperStats {
   spentTodaySol: number;
   avgX: number | null;
   maxX: number | null;
+  /** Worst dip multiple across positions (trough/entry) — the drawdown side. */
+  minX: number | null;
   best: { mint: string; symbol: string | null; x: number; entryMcUsd: number | null; isLive: boolean }[];
 }
 
@@ -99,6 +104,7 @@ export async function paperStats(db: Db): Promise<PaperStats> {
       spentToday: sql<number>`coalesce(sum(${paperTrades.solSpent}) filter (where ${paperTrades.entryTs} >= ${startOfDay.toISOString()}::timestamptz), 0)::float8`,
       avgX: sql<number | null>`avg(${paperTrades.peakMcUsd} / nullif(${paperTrades.entryMcUsd}, 0))::float8`,
       maxX: sql<number | null>`max(${paperTrades.peakMcUsd} / nullif(${paperTrades.entryMcUsd}, 0))::float8`,
+      minX: sql<number | null>`min(${paperTrades.troughMcUsd} / nullif(${paperTrades.entryMcUsd}, 0))::float8`,
     })
     .from(paperTrades);
 
@@ -123,6 +129,7 @@ export async function paperStats(db: Db): Promise<PaperStats> {
     spentTodaySol: a?.spentToday ?? 0,
     avgX: a?.avgX ?? null,
     maxX: a?.maxX ?? null,
+    minX: a?.minX ?? null,
     best: best.filter((b) => b.x != null) as PaperStats['best'],
   };
 }

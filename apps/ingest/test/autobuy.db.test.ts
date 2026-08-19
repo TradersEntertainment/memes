@@ -131,15 +131,21 @@ describe.skipIf(!url)('auto-buy executor + tracker (real postgres)', () => {
     expect(await updatePaperMc(h.db, MINT.fresh, 115_000)).toBeNull(); // still 2x band
     const fiveX = await updatePaperMc(h.db, MINT.fresh, 260_000); // 5.2x
     expect(fiveX).toContain('5X OLDU');
-    // peak never moves down
+    // peak never moves down, trough never moves up
     await updatePaperMc(h.db, MINT.fresh, 30_000);
     const row = (await h.db.select().from(paperTrades).where(eq(paperTrades.mint, MINT.fresh)))[0]!;
     expect(row.peakMcUsd).toBe(260_000);
     expect(row.lastMcUsd).toBe(30_000);
+    expect(row.troughMcUsd).toBe(30_000); // dropped below the 50K entry seed
+    await updatePaperMc(h.db, MINT.fresh, 90_000); // recovery must not lift the trough
+    const after = (await h.db.select().from(paperTrades).where(eq(paperTrades.mint, MINT.fresh)))[0]!;
+    expect(after.troughMcUsd).toBe(30_000);
 
     const stats = await paperStats(h.db);
     expect(stats.openCount).toBeGreaterThanOrEqual(1);
     expect(stats.maxX).toBeGreaterThanOrEqual(5);
+    expect(stats.minX).toBeLessThanOrEqual(0.6); // 30K/50K
+    expect(stats.minX).toBeGreaterThan(0);
 
     // 15-day-old position gets closed
     await h.db.insert(paperTrades).values({

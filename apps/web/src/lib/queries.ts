@@ -209,6 +209,7 @@ export interface PortfolioRow {
   entryMcUsd: number | null;
   lastMcUsd: number | null;
   peakMcUsd: number | null;
+  troughMcUsd: number | null;
 }
 
 export interface Portfolio {
@@ -222,6 +223,8 @@ export interface Portfolio {
     /** Σ solSpent × (peak/entry) — if every position had been sold at its top. */
     peakValueSol: number;
     maxX: number | null;
+    /** Worst dip multiple (trough/entry) across positions. */
+    minX: number | null;
   };
 }
 
@@ -242,6 +245,7 @@ export async function getPaperPortfolio(): Promise<Portfolio> {
       entryMcUsd: paperTrades.entryMcUsd,
       lastMcUsd: paperTrades.lastMcUsd,
       peakMcUsd: paperTrades.peakMcUsd,
+      troughMcUsd: paperTrades.troughMcUsd,
     })
     .from(paperTrades)
     .leftJoin(tokens, eq(paperTrades.mint, tokens.mint))
@@ -260,6 +264,7 @@ export async function getPaperPortfolio(): Promise<Portfolio> {
         currentValueSol: sql<number>`coalesce(sum(${paperTrades.solSpent} * ${xNow}), 0)::float8`,
         peakValueSol: sql<number>`coalesce(sum(${paperTrades.solSpent} * ${xPeak}), 0)::float8`,
         maxX: sql<number | null>`max(${paperTrades.peakMcUsd} / nullif(${paperTrades.entryMcUsd}, 0))::float8`,
+        minX: sql<number | null>`min(${paperTrades.troughMcUsd} / nullif(${paperTrades.entryMcUsd}, 0))::float8`,
       })
       .from(paperTrades)
   )[0];
@@ -273,6 +278,7 @@ export async function getPaperPortfolio(): Promise<Portfolio> {
       currentValueSol: agg?.currentValueSol ?? 0,
       peakValueSol: agg?.peakValueSol ?? 0,
       maxX: agg?.maxX ?? null,
+      minX: agg?.minX ?? null,
     },
   };
 }

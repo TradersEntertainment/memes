@@ -115,6 +115,8 @@ export async function maybeAutoBuy(deps: AutoBuyDeps, signal: AutoBuySignal): Pr
       entryMcUsd: signal.mcUsd,
       peakMcUsd: signal.mcUsd,
       peakTs: signal.mcUsd != null ? now : null,
+      troughMcUsd: signal.mcUsd,
+      troughTs: signal.mcUsd != null ? now : null,
       lastMcUsd: signal.mcUsd,
       lastCheckTs: now,
     })
