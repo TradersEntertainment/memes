@@ -51,6 +51,43 @@ describe('formatSwapAlert (Turkish)', () => {
     expect(text).not.toContain('jup.ag');
   });
 
+  it('links the wallet to the dashboard profile and shows past wins when provided', () => {
+    const text = formatSwapAlert({
+      kind: 'buy',
+      wallet: baseWallet,
+      mint: FIX.mint,
+      tokenSymbol: 'NEW',
+      amountSol: 5,
+      mcUsd: 80_000,
+      secondsAfterLaunch: 120,
+      rotated: null,
+      signature: 'sig',
+      profileBaseUrl: 'https://dash.example',
+      pastWins: [
+        { symbol: 'WIF', mint: FIX.mint, entryMcUsd: 61_000, athMcUsd: 3_200_000_000 },
+        { symbol: null, mint: 'BondingCurvePdaAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', entryMcUsd: null, athMcUsd: 800_000_000 },
+      ],
+    });
+    expect(text).toContain(`<a href="https://dash.example/insiders/${FIX.watched}">`);
+    expect(text).toContain('Geçmişi: $WIF giriş $61K → tepe $3.2B · Bond…AAAA (tepe $800M)');
+  });
+
+  it('omits the profile link and past-wins line when not configured', () => {
+    const text = formatSwapAlert({
+      kind: 'buy',
+      wallet: baseWallet,
+      mint: FIX.mint,
+      tokenSymbol: null,
+      amountSol: 1,
+      mcUsd: null,
+      secondsAfterLaunch: null,
+      rotated: null,
+      signature: 'sig',
+    });
+    expect(text).not.toContain('/insiders/');
+    expect(text).not.toContain('Geçmişi');
+  });
+
   it('honors config-supplied fresh thresholds', () => {
     const base = {
       kind: 'buy' as const,

@@ -65,6 +65,16 @@ describe('classifyTx', () => {
     expect(classifyTx(failedTx, watchedOnly, CFG)).toHaveLength(0);
   });
 
+  it('never treats a SOL↔stable conversion as a trade (USDC/USDT/wSOL token leg)', () => {
+    // Regression: USDC "buys" alerted as "$Cash MC $60.9B". Same tx shape as a
+    // real buy, but the token side is a quote mint → zero events.
+    const usdc = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+    const usdcTx = JSON.parse(
+      JSON.stringify(buyTx).replaceAll(FIX.mint, usdc),
+    ) as EnhancedTx;
+    expect(classifyTx(usdcTx, watchedOnly, CFG)).toHaveLength(0);
+  });
+
   it('never misreads a swap tx as a rotation (swap SOL legs stay internal)', () => {
     // the buy tx moves 12.5 SOL to the curve, but type=SWAP → no transfer events
     const events = classifyTx(buyTx, watchedOnly, { transferMinSol: 1 });

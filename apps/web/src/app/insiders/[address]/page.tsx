@@ -5,6 +5,7 @@ import { FundingTree } from '@/components/funding-tree';
 import { EntryMcHistogram, TimingHistogram } from '@/components/histograms';
 import { ScoreBreakdown } from '@/components/score-breakdown';
 import { Card, Empty, LinkedFlag, PnlText, StatCard, TierBadge, td, th, tr } from '@/components/ui';
+import { WhoIsThis } from '@/components/who-is-this';
 import { launchDelta, pct, pnl, shortAddr, timeAgo, usd } from '@/lib/format';
 import { getFeed, getFundingTree, getPositions, getWallet } from '@/lib/queries';
 
@@ -51,6 +52,10 @@ export default async function InsiderProfilePage({ params }: { params: { address
           GMGN
         </a>
       </header>
+
+      <Card title="Who is this?">
+        <WhoIsThis wallet={wallet} positions={positions} />
+      </Card>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <StatCard

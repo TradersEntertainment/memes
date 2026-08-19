@@ -18,6 +18,17 @@ export const BINANCE_API_BASE = 'https://api.binance.com';
 export const COINBASE_API_BASE = 'https://api.coinbase.com';
 export const COINBASE_EXCHANGE_API_BASE = 'https://api.exchange.coinbase.com';
 export const PUMPPORTAL_WS_URL = 'wss://pumpportal.fun/api/data';
+
+/**
+ * Quote-side mints that are never "the token": a swap whose token leg is one of
+ * these is a SOL↔stable conversion, not a memecoin trade — excluded from live
+ * classification, scoring aggregates, and discovery alike.
+ */
+export const QUOTE_MINTS: ReadonlySet<string> = new Set([
+  'So11111111111111111111111111111111111111112', // wSOL
+  'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', // USDC
+  'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB', // USDT
+]);
 /** Self-custody trade builder: returns a serialized tx to sign locally. */
 export const PUMPPORTAL_TRADE_LOCAL_URL = 'https://pumpportal.fun/api/trade-local';
 

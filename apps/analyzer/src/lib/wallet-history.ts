@@ -1,4 +1,4 @@
-import { normalizeSwap } from '@insiderscope/shared';
+import { normalizeSwap, QUOTE_MINTS } from '@insiderscope/shared';
 import type { AnalyzerCtx } from '../context';
 
 export interface MintAggregate {
@@ -42,6 +42,9 @@ export async function fetchWalletSwapAggregates(
     for (const tx of page) {
       const swap = normalizeSwap(tx, { walletHint: wallet });
       if (!swap || swap.wallet !== wallet) continue;
+      // SOL↔stable conversions are portfolio management, not trades — counting
+      // them would inflate totalTrades and poison the selectivity/bot checks.
+      if (QUOTE_MINTS.has(swap.mint)) continue;
       totalTrades += 1;
       if (!newestTs || swap.ts > newestTs) newestTs = swap.ts;
       if (!oldestTs || swap.ts < oldestTs) oldestTs = swap.ts;

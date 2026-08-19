@@ -1,4 +1,4 @@
-import { GECKOTERMINAL_API_BASE } from './constants';
+import { GECKOTERMINAL_API_BASE, QUOTE_MINTS } from './constants';
 
 /**
  * GeckoTerminal public API (keyless, ~30 req/min): the "what's running RIGHT
@@ -19,13 +19,6 @@ export interface GeckoPool {
   /** Pool creation time, epoch ms. */
   poolCreatedAt: number | null;
 }
-
-/** Quote-side mints that are never the token we're hunting. */
-const QUOTE_MINTS = new Set([
-  'So11111111111111111111111111111111111111112', // wSOL
-  'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', // USDC
-  'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB', // USDT
-]);
 
 const BASE58_ADDRESS = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 

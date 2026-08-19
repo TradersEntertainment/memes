@@ -38,6 +38,14 @@ const EnvSchema = z.object({
   TELEGRAM_CHAT_ID: z.string().default(''),
   WEBHOOK_AUTH_HEADER: z.string().default(''),
   PUBLIC_BASE_URL: z.string().default(''),
+  /**
+   * Public URL of the DASHBOARD (web service). When set, Telegram alerts
+   * deep-link every wallet to its /insiders/<address> profile page.
+   */
+  WEB_BASE_URL: z
+    .string()
+    .default('')
+    .transform((v) => v.replace(/\/+$/, '')),
   /** Explicit ingest port; falls back to the platform-injected PORT, then 3001. */
   INGEST_PORT: optionalPort,
   /** Injected by Railway/Heroku-style platforms. */

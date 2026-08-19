@@ -104,9 +104,12 @@ export async function maybeAutoBuy(deps: AutoBuyDeps, signal: AutoBuySignal): Pr
 
   deps.trackMint?.(signal.mint);
 
-  const who = signal.wallet.label
+  let who = signal.wallet.label
     ? `${escapeHtml(signal.wallet.label)} (${shortAddr(signal.wallet.address)})`
     : shortAddr(signal.wallet.address);
+  if (cfg.WEB_BASE_URL) {
+    who = `<a href="${cfg.WEB_BASE_URL}/insiders/${signal.wallet.address}">${who}</a>`;
+  }
   const scorePart = signal.wallet.insiderScore != null ? `, skor ${Math.round(signal.wallet.insiderScore)}` : '';
   const detail = [
     `Sinyal: ${who} (${signal.wallet.tier}${scorePart}) taze token aldı`,

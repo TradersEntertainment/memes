@@ -1,9 +1,15 @@
-import { alerts, eq, liveEvents, wallets, type Db } from '@insiderscope/db';
+import { alerts, and, desc, eq, gte, liveEvents, positions, tokens, wallets, type Db } from '@insiderscope/db';
 import type { AppConfig } from '@insiderscope/shared';
 import type { Bot } from 'grammy';
 import { ensureTokenMeta } from '../pipeline/enrich';
 import type { PumpCurveCache } from '../pump-cache';
-import { formatRotationAlert, formatSwapAlert, type AlertWalletInfo, type RotationAlertInput } from './format';
+import {
+  formatRotationAlert,
+  formatSwapAlert,
+  type AlertWalletInfo,
+  type PastWin,
+  type RotationAlertInput,
+} from './format';
 
 export interface SendCtx {
   db: Db;
@@ -44,6 +50,22 @@ function walletInfo(w: {
   };
 }
 
+/** The wallet's best $10M+ past positions — the alert's "who is this" line. */
+async function loadPastWins(ctx: SendCtx, wallet: string): Promise<PastWin[]> {
+  return ctx.db
+    .select({
+      symbol: tokens.symbol,
+      mint: positions.mint,
+      entryMcUsd: positions.entryMcUsd,
+      athMcUsd: tokens.athMcUsd,
+    })
+    .from(positions)
+    .innerJoin(tokens, eq(positions.mint, tokens.mint))
+    .where(and(eq(positions.wallet, wallet), gte(tokens.athMcUsd, ctx.cfg.DISCOVER_MIN_MC_USD)))
+    .orderBy(desc(tokens.athMcUsd))
+    .limit(2);
+}
+
 /** Alert-queue worker body: load the event, format Turkish, deliver, record. */
 export async function sendSwapAlert(ctx: SendCtx, eventId: number): Promise<void> {
   const rows = await ctx.db
@@ -66,6 +88,7 @@ export async function sendSwapAlert(ctx: SendCtx, eventId: number): Promise<void
   const secondsAfterLaunch = meta.launchTs
     ? (event.ts.getTime() - meta.launchTs.getTime()) / 1000
     : null;
+  const pastWins = await loadPastWins(ctx, wallet.address).catch(() => []);
 
   const text = formatSwapAlert({
     kind: event.eventType,
@@ -82,6 +105,8 @@ export async function sendSwapAlert(ctx: SendCtx, eventId: number): Promise<void
     signature: event.signature,
     freshMaxAgeSec: ctx.cfg.AUTOBUY_MAX_MINT_AGE_MIN * 60,
     freshMaxMcUsd: ctx.cfg.AUTOBUY_MAX_MC_USD,
+    profileBaseUrl: ctx.cfg.WEB_BASE_URL || undefined,
+    pastWins,
   });
   await deliver(ctx, text, eventId);
 }
@@ -90,7 +115,11 @@ export async function sendRotationAlert(
   ctx: SendCtx,
   input: RotationAlertInput & { eventId?: number | null },
 ): Promise<void> {
-  await deliver(ctx, formatRotationAlert(input), input.eventId ?? null);
+  const text = formatRotationAlert({
+    ...input,
+    profileBaseUrl: input.profileBaseUrl ?? (ctx.cfg.WEB_BASE_URL || undefined),
+  });
+  await deliver(ctx, text, input.eventId ?? null);
 }
 
 /** Pre-formatted composite alerts (confluence, dev-launch, digest). */

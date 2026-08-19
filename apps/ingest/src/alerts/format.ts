@@ -13,6 +13,13 @@ export interface AlertWalletInfo {
   bigTokenCount: number | null;
 }
 
+export interface PastWin {
+  symbol: string | null;
+  mint: string;
+  entryMcUsd: number | null;
+  athMcUsd: number | null;
+}
+
 export interface SwapAlertInput {
   kind: 'buy' | 'sell';
   wallet: AlertWalletInfo;
@@ -26,6 +33,10 @@ export interface SwapAlertInput {
   /** Fresh-mint emphasis thresholds — pass from config so 🚀 matches auto-buy. */
   freshMaxAgeSec?: number;
   freshMaxMcUsd?: number;
+  /** Dashboard base URL — when set the wallet name links to its profile page. */
+  profileBaseUrl?: string;
+  /** The wallet's best past $10M+ positions — the "who is this" one-liner. */
+  pastWins?: PastWin[];
 }
 
 export function fmtSol(n: number): string {
@@ -39,12 +50,28 @@ function trimZeros(s: string): string {
   return s.replace(/\.?0+$/, '');
 }
 
-function walletLine(w: AlertWalletInfo): string {
-  const name = w.label ? `${escapeHtml(w.label)} (${shortAddr(w.address)})` : shortAddr(w.address);
+function walletLine(w: AlertWalletInfo, profileBaseUrl?: string): string {
+  let name = w.label ? `${escapeHtml(w.label)} (${shortAddr(w.address)})` : shortAddr(w.address);
+  if (profileBaseUrl) {
+    name = `<a href="${profileBaseUrl}/insiders/${w.address}">${name}</a>`;
+  }
   const parts: string[] = [];
   if (w.score != null) parts.push(`skor ${Math.round(w.score)}`);
   if ((w.bigTokenCount ?? 0) >= 2) parts.push(`${w.bigTokenCount}x winner`);
   return parts.length > 0 ? `${name} — ${parts.join(', ')}` : name;
+}
+
+/** "Geçmişi: $WIF giriş $61K → tepe $3.2B · $POPCAT …" — who this wallet is. */
+function pastWinsLine(wins: PastWin[]): string | null {
+  if (wins.length === 0) return null;
+  const parts = wins.map((w) => {
+    const name = w.symbol ? `$${escapeHtml(w.symbol)}` : shortAddr(w.mint);
+    if (w.entryMcUsd != null && w.athMcUsd != null) {
+      return `${name} giriş ${fmtUsdCompact(w.entryMcUsd)} → tepe ${fmtUsdCompact(w.athMcUsd)}`;
+    }
+    return w.athMcUsd != null ? `${name} (tepe ${fmtUsdCompact(w.athMcUsd)})` : name;
+  });
+  return `Geçmişi: ${parts.join(' · ')}`;
 }
 
 function linksLine(mint: string, signature: string, withBuyLinks = false): string {
@@ -90,10 +117,12 @@ export function formatSwapAlert(i: SwapAlertInput): string {
   if (launchDelta) amountParts.push(`Launch ${launchDelta}`);
 
   const rotated = i.rotated ? `EVET (parent: ${shortAddr(i.rotated.parent)})` : 'hayır';
+  const wins = pastWinsLine(i.pastWins ?? []);
 
   return [
     header,
-    `Cüzdan: ${walletLine(i.wallet)}`,
+    `Cüzdan: ${walletLine(i.wallet, i.profileBaseUrl)}`,
+    ...(wins ? [wins] : []),
     `Token: ${token}`,
     `Miktar: ${amountParts.join(' | ')}`,
     `Rotated wallet: ${rotated}`,
@@ -105,12 +134,13 @@ export interface RotationAlertInput {
   parent: AlertWalletInfo;
   child: string;
   amountSol: number;
+  profileBaseUrl?: string;
 }
 
 export function formatRotationAlert(i: RotationAlertInput): string {
   return [
     'ℹ️ <b>WALLET ROTATION</b>',
-    `Kaynak: ${walletLine(i.parent)}`,
+    `Kaynak: ${walletLine(i.parent, i.profileBaseUrl)}`,
     `Hedef: ${shortAddr(i.child)} — izlemeye alındı (probation)`,
     `Miktar: ${fmtSol(i.amountSol)} SOL`,
     `Linkler: <a href="https://solscan.io/account/${i.child}">Solscan</a> | <a href="https://gmgn.ai/sol/address/${i.child}">GMGN</a>`,

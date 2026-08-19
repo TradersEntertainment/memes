@@ -1,6 +1,7 @@
 import {
   normalizeNativeTransfers,
   normalizeSwap,
+  QUOTE_MINTS,
   type EnhancedTx,
   type NormalizedSwap,
   type NormalizedTransfer,
@@ -38,7 +39,9 @@ export function classifyTx(
   const payer = watched.get(tx.feePayer);
   if (!payer) return events;
   const swap = normalizeSwap(tx, { walletHint: tx.feePayer });
-  if (swap) {
+  // A "token" leg that is wSOL/USDC/USDT means a SOL↔stable conversion, not a
+  // memecoin trade — alerting those produced "$Cash MC $60.9B" nonsense.
+  if (swap && !QUOTE_MINTS.has(swap.mint)) {
     const wallet = watched.get(swap.wallet);
     if (wallet) events.push({ kind: swap.direction, wallet, swap });
   }

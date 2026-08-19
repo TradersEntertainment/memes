@@ -201,7 +201,9 @@ pnpm dev:web        # http://localhost:3000   (production: pnpm build && pnpm --
   GMGN/Jupiter links), and a wallet **bubble map** (area ∝ |realized PnL|, color = tier, every
   bubble links to the wallet's profile; `/insiders` is its table twin)
 - `/insiders` — sortable table (score, win rate, PnL, avg entry MC, trades, activity) with tier filter
-- `/insiders/[address]` — score-component breakdown, entry-MC + timing histograms, positions
+- `/insiders/[address]` — "Who is this?" identity card (which runners it entered early and at
+  what cap vs. the token's peak, whale-sized supply positions, creator links, rotation origin),
+  score-component breakdown, entry-MC + timing histograms, positions
   table (entry MC, launch delta, supply %, exit MC, PnL, holding, creator-linked), funding &
   rotation tree, event timeline
 - `/tokens/[mint]` — early-buyer ranking with insider flags and the creator connection map
@@ -296,6 +298,11 @@ automated selling / take-profit.
 
 Required: `HELIUS_API_KEY`, `DATABASE_URL`, `REDIS_URL`, `TELEGRAM_BOT_TOKEN`,
 `TELEGRAM_CHAT_ID`, `WEBHOOK_AUTH_HEADER`, `PUBLIC_BASE_URL`, `INGEST_PORT`.
+
+Recommended: `WEB_BASE_URL` — the dashboard's public URL (on the ingest service). When set,
+every Telegram alert deep-links the wallet name to its `/insiders/<address>` profile, and swap
+alerts carry a one-line pedigree ("Geçmişi: $WIF giriş $61K → tepe $3.2B") built from the
+wallet's best $10M+ positions.
 
 Tunables (defaults in parentheses): `EARLY_WINDOW_MIN` (30), `EARLY_MAX_BUYERS` (150),
 `TRANSFER_MIN_SOL` (5), `SELL_ALERTS` (true), `PROBATION_EXPIRY_DAYS` (14),
