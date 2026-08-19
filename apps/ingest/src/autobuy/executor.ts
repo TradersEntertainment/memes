@@ -8,6 +8,7 @@ import {
   type AppConfig,
 } from '@insiderscope/shared';
 import { ensureTokenMeta } from '../pipeline/enrich';
+import { assessLaunchRisk } from '../launch-risk';
 import type { PumpCurveCache } from '../pump-cache';
 import type { WatchedWallet } from '../watched';
 import { fmtSol } from '../alerts/format';
@@ -72,6 +73,26 @@ export async function maybeAutoBuy(deps: AutoBuyDeps, signal: AutoBuySignal): Pr
   if (!fresh) {
     log(`${tag}: skipped — not a fresh mint (age ${ageSec == null ? '?' : Math.round(ageSec)}s, mc ${signal.mcUsd ?? '?'})`);
     return 'skipped';
+  }
+
+  // Bait guard: one wallet sitting on a huge share of supply is exit
+  // liquidity waiting for us — not a trade. Runs in dry-run too, so the paper
+  // record shows the traps that were dodged. (0 disables.)
+  if (cfg.AUTOBUY_MAX_TOP_HOLDER_PCT > 0 && deps.helius) {
+    const risk = await assessLaunchRisk(
+      {
+        db,
+        helius: deps.helius,
+        pumpCache: deps.pumpCache,
+        log,
+        solPriceFallbackUsd: cfg.SOL_PRICE_FALLBACK_USD,
+      },
+      signal.mint,
+    ).catch(() => null);
+    if (risk?.top1Pct != null && risk.top1Pct > cfg.AUTOBUY_MAX_TOP_HOLDER_PCT) {
+      log(`${tag}: skipped — top holder owns ${risk.top1Pct.toFixed(1)}% of supply (bait guard)`);
+      return 'skipped';
+    }
   }
 
   const spentRows = await db

@@ -5,6 +5,7 @@ import type { RotationCheckJobData } from '../pipeline/rotation';
 import { PIPELINE_QUEUE, SYSTEM_QUEUE } from '../system-queue';
 import { refreshAth } from './ath-refresh';
 import { sendDailyDigest } from './daily-digest';
+import { runLaunchRiskCheck, type LaunchRiskJobData } from './launch-risk-check';
 import { nightlyRescore, type PipelineReason } from './nightly-rescore';
 import { sweepProbation } from './probation-expiry';
 import { reconcile } from './reconcile';
@@ -33,6 +34,9 @@ export function startSystemWorker(ctx: AppCtx): Worker {
           break;
         case 'watchdog':
           await runWatchdog(ctx);
+          break;
+        case 'launch-risk-check':
+          await runLaunchRiskCheck(ctx, job.data as LaunchRiskJobData);
           break;
         default:
           ctx.log(`system worker: unknown job "${job.name}"`);

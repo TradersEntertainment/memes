@@ -122,9 +122,17 @@ export function buildAppCtx(): AppCtx {
         `Creator: ${hit.label ? escapeHtml(hit.label) : shortAddr(info.creator!)} — ${who}`,
         `Token: ${info.symbol ? `$${escapeHtml(info.symbol)}` : shortAddr(info.mint)} (${shortAddr(info.mint)})`,
         `Linkler: <a href="https://pump.fun/${info.mint}">pump.fun</a> | <a href="https://gmgn.ai/sol/token/${info.mint}">GMGN</a>`,
+        `5 dk sonra tuzak kontrolü yapılacak (konsantrasyon + MC boyama).`,
       ].join('\n');
       await enqueueCustomAlert(text);
       log(`dev-launch alert: ${info.creator} → ${info.mint}`);
+      // Bait check after the dust settles: five minutes is enough for a
+      // painted market cap or a one-wallet supply grab to become visible.
+      await systemQueue.add(
+        'launch-risk-check',
+        { mint: info.mint, symbol: info.symbol ?? null },
+        { delay: 5 * 60_000 },
+      );
     })().catch((err) => log(`dev-launch check failed: ${err}`));
   };
 

@@ -218,7 +218,11 @@ Route handlers read Postgres directly through Drizzle — no separate API layer.
   `PUMPPORTAL_ENABLED=false`.
 - **🧨 Dev-launch alerts** — every pump.fun launch's creator is checked (5-min cache) against
   creators of past $10M tokens and all watched wallets; a hit alerts within seconds
-  (`DEV_ALERTS=false` to disable).
+  (`DEV_ALERTS=false` to disable). Five minutes later a **bait check** runs on the same mint
+  (supply concentration via largest token accounts, curve excluded; painted-MC sanity — a
+  minutes-old token showing millions of MC on trivial volume) and posts ⚠️ TUZAK İŞARETLERİ when
+  the launch looks like an exit-liquidity setup — the first slice of the planned baiter
+  detection.
 - **🔥 Confluence alerts** — when `CONFLUENCE_MIN_WALLETS` (2) watched wallets buy the same mint
   within `CONFLUENCE_WINDOW_MIN` (60) minutes, a combined alert lists them by score — the
   strongest signal the system produces, deduped once per mint per window.
@@ -282,7 +286,9 @@ scoreboard; `/autobuy off|on` is the kill switch.
 
 Guardrails (enforced identically in dry-run and live): one position per mint ever, daily SOL
 ceiling (`AUTOBUY_DAILY_CAP_SOL`), tier filter (`AUTOBUY_TIERS`), stale/backfilled events never
-trigger, muted wallets never trigger.
+trigger, muted wallets never trigger, and a **bait guard** — when the largest non-curve holder
+owns more than `AUTOBUY_MAX_TOP_HOLDER_PCT` (40%) of supply, the buy is skipped: that wallet is
+exit liquidity waiting to dump.
 
 **Going live** (only after the dry-run scoreboard convinces you): create a **separate burner
 wallet**, fund it with a small amount, set `AUTOBUY_WALLET_SECRET` (bs58) and

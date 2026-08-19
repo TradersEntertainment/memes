@@ -126,6 +126,8 @@ const EnvSchema = z.object({
   AUTOBUY_MAX_MC_USD: z.coerce.number().positive().default(1_000_000),
   /** Wallet tiers whose buys may trigger the auto-buy. */
   AUTOBUY_TIERS: z.string().default('insider,watch'),
+  /** Skip auto-buys when the largest non-curve holder owns more than this % (0 = off). */
+  AUTOBUY_MAX_TOP_HOLDER_PCT: z.coerce.number().nonnegative().default(40),
   AUTOBUY_SLIPPAGE_PCT: z.coerce.number().positive().default(15),
   AUTOBUY_PRIORITY_FEE_SOL: z.coerce.number().positive().default(0.001),
   /** bs58 secret key of the trading wallet — live mode only. NEVER your main wallet. */

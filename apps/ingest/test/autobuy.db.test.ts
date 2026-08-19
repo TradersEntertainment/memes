@@ -26,6 +26,7 @@ function cfgWith(over: Partial<AppConfig>): AppConfig {
     AUTOBUY_MAX_MINT_AGE_MIN: 60,
     AUTOBUY_MAX_MC_USD: 1_000_000,
     AUTOBUY_TIERS: 'insider,watch',
+    AUTOBUY_MAX_TOP_HOLDER_PCT: 0, // bait guard exercised in its own test
     ALERT_MAX_AGE_MIN: 15,
     ...over,
   };
@@ -186,8 +187,11 @@ describe.skipIf(!url)('auto-buy executor + tracker (real postgres)', () => {
     const out = await maybeAutoBuy(d, signal({ mint: MINT.second }));
     expect(out).toBe('live');
     expect(fetchImpl).toHaveBeenCalledOnce();
-    const [method, params] = rpc.mock.calls[0]! as unknown as [string, unknown[]];
-    expect(method).toBe('sendTransaction');
+    const sendCall = rpc.mock.calls.find((c) => (c as unknown[])[0] === 'sendTransaction') as
+      | [string, unknown[]]
+      | undefined;
+    expect(sendCall).toBeTruthy();
+    const params = sendCall![1];
     // the sent payload deserializes back into a tx SIGNED by the burner
     const sent = VersionedTransaction.deserialize(Buffer.from(params[0] as string, 'base64'));
     expect(sent.signatures[0]!.some((b) => b !== 0)).toBe(true);
@@ -195,6 +199,19 @@ describe.skipIf(!url)('auto-buy executor + tracker (real postgres)', () => {
     expect(row.isLive).toBe(true);
     expect(row.txSignature).toBe('FakeTxSignature111');
     expect(notifications[0]).toContain('GERÇEK ALIM');
+  });
+
+  it('skips the buy when one wallet holds too much supply (bait guard)', async () => {
+    const cfg = cfgWith({ AUTOBUY_MAX_TOP_HOLDER_PCT: 40 });
+    const rpc = vi.fn(async (method: string) =>
+      method === 'getTokenLargestAccounts'
+        ? { value: [{ address: 'BaiterAcc', uiAmount: 600_000_000 }] } // 60% of 1B
+        : null,
+    );
+    const d: AutoBuyDeps = { ...deps(cfg), helius: { rpc } as unknown as AutoBuyDeps['helius'] };
+    const out = await maybeAutoBuy(d, signal({ mint: MINT.old }));
+    expect(out).toBe('skipped');
+    expect(await h.db.select().from(paperTrades).where(eq(paperTrades.mint, MINT.old))).toHaveLength(0);
   });
 
   it('drops the position and warns when the live buy fails', async () => {
