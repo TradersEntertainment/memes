@@ -4,12 +4,58 @@ import {
   chunk,
   discoveryFloorUsd,
   fetchBoostedTokens,
+  fetchGeckoSolanaPools,
   fetchLatestTokenProfiles,
   getPairsForTokens,
   pairMcUsd,
 } from '@insiderscope/shared';
 import type { AnalyzerCtx } from '../context';
 import { upsertToken } from '../lib/persist';
+
+/**
+ * The "what's running RIGHT NOW" sweep: GeckoTerminal's trending + 24h-volume
+ * leaders for Solana, filtered through the pair-age-aware discovery floor
+ * (fresh pools qualify at $5M, older ones need $10M). Free, keyless, zero
+ * Helius credits — safe to run at boot and every hour. Passing pools become
+ * `candidate` rows with athTs = now, which puts them squarely in the
+ * recency-priority arm of the crawl gate.
+ */
+export async function sweepRecentRunners(
+  ctx: Pick<AnalyzerCtx, 'db' | 'cfg' | 'log'>,
+  fetchImpl?: typeof fetch,
+): Promise<number> {
+  const { db, cfg, log } = ctx;
+  const [trending, top] = await Promise.all([
+    fetchGeckoSolanaPools('trending', 2, fetchImpl),
+    fetchGeckoSolanaPools('top', 2, fetchImpl),
+  ]);
+  const byMint = new Map<string, (typeof trending)[number]>();
+  for (const pool of [...trending, ...top]) {
+    const seen = byMint.get(pool.mint);
+    if (!seen || (pool.mcUsd ?? 0) > (seen.mcUsd ?? 0)) byMint.set(pool.mint, pool);
+  }
+
+  let added = 0;
+  for (const pool of byMint.values()) {
+    if (pool.mcUsd == null || pool.mcUsd < discoveryFloorUsd(cfg, pool.poolCreatedAt ?? undefined)) {
+      continue;
+    }
+    await upsertToken(db, {
+      mint: pool.mint,
+      symbol: pool.symbol,
+      name: pool.name,
+      poolAddress: pool.poolAddress,
+      athMcUsd: pool.mcUsd,
+      athTs: new Date(),
+      status: 'candidate',
+    });
+    added += 1;
+  }
+  log(
+    `sweep: ${added} current runner(s) above the bar from ${byMint.size} geckoterminal pools (trending ${trending.length} + top-volume ${top.length})`,
+  );
+  return added;
+}
 
 /**
  * Best-effort candidate discovery. DexScreener exposes no "all pairs ≥ $10M"
@@ -42,7 +88,10 @@ export async function runDiscover(ctx: AnalyzerCtx): Promise<void> {
   }
   log(`discover: refreshed ${refreshed}/${known.length} known tokens`);
 
-  // 2. New candidates from boosted/profile feeds
+  // 2. Current runners from GeckoTerminal (trending + volume leaders)
+  await sweepRecentRunners(ctx).catch((err) => log(`discover: runner sweep failed — ${err}`));
+
+  // 3. New candidates from boosted/profile feeds
   const knownSet = new Set(known.map((t) => t.mint));
   const seen = [...new Set([...(await fetchBoostedTokens()), ...(await fetchLatestTokenProfiles())])];
   const fresh = seen.filter((m) => !knownSet.has(m));

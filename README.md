@@ -225,6 +225,10 @@ Route handlers read Postgres directly through Drizzle — no separate API layer.
   peaked ≥ `RECENT_MIN_MC_USD` ($5M) within `RECENT_WINDOW_DAYS` (14) qualifies for the pipeline
   and is crawled FIRST (newest peak first); older tokens still need `DISCOVER_MIN_MC_USD` ($10M)
   and are worked as the backlog, so when no fresh runner exists the old universe keeps growing.
+- **Current-runner sweep** — GeckoTerminal's Solana trending + 24h-volume-leader pools (keyless,
+  free, zero Helius credits) are swept at boot and every hour; pools clearing the pair-age-aware
+  bar become candidates with a fresh peak timestamp, which lands them in the recency arm and gets
+  them crawled on the next pass. This is what keeps the system pointed at what's running NOW.
 - **Graduation funnel** — every pump.fun bonding-curve completion is recorded as a token row
   (`TRACK_GRADUATIONS`), the hourly refresh follows its MC, and the moment it clears the bar its
   bounded curve history is crawled — fresh runners feed the insider pool hours after launch.
@@ -238,7 +242,9 @@ Route handlers read Postgres directly through Drizzle — no separate API layer.
 - **Self-driving ops** — boot health report to Telegram, auto-scan when there's pending work, a
   15-min watchdog that alerts once on each problem (and once on recovery) and re-registers the
   Helius webhook if it drifts, credit/circuit awareness (a dead Helius key pauses crawling and
-  reports instead of burning retries), and pipeline start/finish/abort notices.
+  reports instead of burning retries), and pipeline start/finish/abort notices. The watch floor
+  also runs directly at boot (pure SQL) — a redeploy never sits with an empty watch list waiting
+  for the next scoring pass to reach its final step.
 - **📊 Daily digest** — 09:00 UTC summary (24h events, top buys, tier counts);
   `DIGEST_ENABLED=false` to disable.
 - **Unattended pipeline** — 03:00 UTC nightly (and on demand via the bot's `/scan`), the ingest

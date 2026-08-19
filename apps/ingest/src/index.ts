@@ -1,3 +1,4 @@
+import { buildCtx as buildAnalyzerCtx, ensureWatchFloor } from '@insiderscope/analyzer';
 import { closeDb } from '@insiderscope/db';
 import { runMigrations } from '@insiderscope/db/migrate';
 import { getConfig, resolveIngestPort } from '@insiderscope/shared';
@@ -7,6 +8,7 @@ import { buildHealthReport } from './health';
 import { maybeAutoScan } from './jobs/nightly-rescore';
 import { scheduleRepeatables, startPipelineWorker, startSystemWorker } from './jobs/scheduler';
 import { buildServer } from './server';
+import { invalidateWatchedCache } from './watched';
 import { syncHeliusWebhook } from './webhook-sync';
 
 async function main(): Promise<void> {
@@ -35,6 +37,16 @@ async function main(): Promise<void> {
       .catch((err) => ctx.log(`bot polling stopped: ${err}`));
     ctx.log('telegram bot polling started');
   }
+
+  // Cold-start guard, BEFORE the webhook sync: when nobody clears the score
+  // thresholds the watch list is empty and live tracking is effectively off —
+  // promote the best already-scored wallets right now (pure SQL, no credits)
+  // instead of waiting for the next full scoring pass to reach its last step.
+  const promoted = await ensureWatchFloor(buildAnalyzerCtx()).catch((err) => {
+    ctx.log(`boot watch-floor failed: ${err}`);
+    return 0;
+  });
+  if (promoted > 0) invalidateWatchedCache();
 
   await syncHeliusWebhook(ctx).catch((err) => ctx.log(`initial webhook sync failed: ${err}`));
 

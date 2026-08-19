@@ -9,6 +9,7 @@ export * from './helius/normalize';
 export * from './pumpfun';
 export * from './launch-detect';
 export * from './dexscreener';
+export * from './geckoterminal';
 export * from './sol-price';
 export * from './mc';
 export * from './funding';

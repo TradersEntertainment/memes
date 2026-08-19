@@ -1,4 +1,4 @@
-import { crawlableCandidatesWhere, upsertToken } from '@insiderscope/analyzer';
+import { crawlableCandidatesWhere, sweepRecentRunners, upsertToken } from '@insiderscope/analyzer';
 import { and, eq, gte, isNotNull, isNull, liveEvents, sql, tokens } from '@insiderscope/db';
 import { bestPair, chunk, discoveryFloorUsd, getPairsForTokens, pairMcUsd } from '@insiderscope/shared';
 import type { AppCtx } from '../context';
@@ -14,6 +14,10 @@ import { maybeAutoScan } from './nightly-rescore';
  */
 export async function refreshAth(ctx: AppCtx): Promise<void> {
   const { db, cfg, log } = ctx;
+
+  // First, pull in whatever is running RIGHT NOW (GeckoTerminal trending +
+  // volume leaders) so this hour's crossers count sees today's runners too.
+  await sweepRecentRunners({ db, cfg, log }).catch((err) => log(`ath-refresh: sweep failed — ${err}`));
 
   const known = await db.select({ mint: tokens.mint }).from(tokens);
   const bought = await db

@@ -13,6 +13,7 @@ export const PUMPFUN_TOKEN_DECIMALS = 6;
 export const HELIUS_API_BASE = 'https://api.helius.xyz';
 export const HELIUS_RPC_BASE = 'https://mainnet.helius-rpc.com';
 export const DEXSCREENER_API_BASE = 'https://api.dexscreener.com';
+export const GECKOTERMINAL_API_BASE = 'https://api.geckoterminal.com';
 export const BINANCE_API_BASE = 'https://api.binance.com';
 export const COINBASE_API_BASE = 'https://api.coinbase.com';
 export const COINBASE_EXCHANGE_API_BASE = 'https://api.exchange.coinbase.com';

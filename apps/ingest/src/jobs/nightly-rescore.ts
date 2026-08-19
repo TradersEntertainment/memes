@@ -7,6 +7,7 @@ import {
   runFundingAll,
   runImportDir,
   runScoreAll,
+  sweepRecentRunners,
 } from '@insiderscope/analyzer';
 import { count, eq, sql, tokens, wallets } from '@insiderscope/db';
 import { HeliusCircuitOpenError } from '@insiderscope/shared';
@@ -158,6 +159,8 @@ export async function maybeAutoScan(ctx: AppCtx, reason: PipelineReason): Promis
   await repairMislabeledTokens(analyzerCtx).catch((err) =>
     ctx.log(`auto-scan: repair failed — ${err}`),
   );
+  // Refresh the candidate pool with today's runners before deciding "no work".
+  await sweepRecentRunners(analyzerCtx).catch((err) => ctx.log(`auto-scan: sweep failed — ${err}`));
   const pending = await candidateCount(ctx);
   const neverScored = await ctx.db
     .select({ n: count() })

@@ -1,0 +1,76 @@
+{
+  "data": [
+    {
+      "id": "solana_PoolWifAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "type": "pool",
+      "attributes": {
+        "name": "WIF / SOL",
+        "address": "PoolWifAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "pool_created_at": "2026-08-14T10:00:00Z",
+        "fdv_usd": "9100000",
+        "market_cap_usd": "8500000",
+        "volume_usd": { "h24": "1200000" },
+        "reserve_in_usd": "800000"
+      },
+      "relationships": {
+        "base_token": { "data": { "id": "solana_MemeCoinMintAAAAAAAAAAAAAAAAAAAAAAAAAAAApump", "type": "token" } },
+        "quote_token": { "data": { "id": "solana_So11111111111111111111111111111111111111112", "type": "token" } }
+      }
+    },
+    {
+      "id": "solana_FlippedPoolAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "type": "pool",
+      "attributes": {
+        "name": "SOL / MEME",
+        "address": "FlippedPoolAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "pool_created_at": "2026-08-10T00:00:00Z",
+        "fdv_usd": "99000000000",
+        "market_cap_usd": "99000000000"
+      },
+      "relationships": {
+        "base_token": { "data": { "id": "solana_So11111111111111111111111111111111111111112", "type": "token" } },
+        "quote_token": { "data": { "id": "solana_MemeCoinMintAAAAAAAAAAAAAAAAAAAAAAAAAAAApump", "type": "token" } }
+      }
+    },
+    {
+      "id": "eth_0xdeadbeef",
+      "type": "pool",
+      "attributes": {
+        "name": "PEPE / WETH",
+        "address": "0xdeadbeef",
+        "fdv_usd": "50000000"
+      },
+      "relationships": {
+        "base_token": { "data": { "id": "eth_0xPepeToken", "type": "token" } }
+      }
+    },
+    {
+      "id": "solana_PoolFdvOnlyAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "type": "pool",
+      "attributes": {
+        "name": "GOAT / SOL",
+        "address": "PoolFdvOnlyAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "pool_created_at": "2026-08-16T12:30:00Z",
+        "fdv_usd": "42000000",
+        "market_cap_usd": null
+      },
+      "relationships": {
+        "base_token": { "data": { "id": "solana_FirstBuyerAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "type": "token" } }
+      }
+    },
+    {
+      "id": "solana_PoolWifSecondAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "type": "pool",
+      "attributes": {
+        "name": "WIF / USDC",
+        "address": "PoolWifSecondAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "pool_created_at": "2026-08-15T09:00:00Z",
+        "fdv_usd": "9900000",
+        "market_cap_usd": "9900000"
+      },
+      "relationships": {
+        "base_token": { "data": { "id": "solana_MemeCoinMintAAAAAAAAAAAAAAAAAAAAAAAAAAAApump", "type": "token" } }
+      }
+    }
+  ]
+}
